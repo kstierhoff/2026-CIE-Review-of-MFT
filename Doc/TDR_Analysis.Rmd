@@ -13,7 +13,7 @@ if (!require("pak")) install.packages("pak")
 # Install and load required packages from CRAN ---------------------------------
 pacman::p_load(tidyverse,plotly,lubridate,here,DBI,odbc,
                knitr,DT,fs,oce,sf,mapview,shadowtext,
-               patchwork,RSQLite,xts)
+               patchwork,RSQLite,xts,progress)
 
 # Install and load required packages from Github -------------------------------
 if (!require("atm")) pkg_install("SWFSC/atm")
@@ -137,15 +137,27 @@ if (copy.files) {
 # Create tbl for all TDR data
 tbl.tdr.all <- data.frame()
 
+# Read TDR info file for fixing date/time/etc.
+tdr.info <- read_csv(here("Data/TDR/tdr-info.csv")) %>% 
+  mutate(cruise = as.character(cruise))
+
 # For each directory in Data/TDR (grouped by survey)
-for (i in dir_ls(here("Data/TDR"))) {
-  # i = dir_ls(here("Data/TDR"))[10]
+for (i in dir_ls(here("Data/TDR"), type = "directory")) {
+  # i = dir_ls(here("Data/TDR"), type = "directory")[2]
   tbl.tdr.cruise <- data.frame()
   
   # For each location (Kite/Footrope)
   for (ii in dir_ls(i)) {
-    # ii = dir_ls(i)[1] # Footrope
-    # ii = dir_ls(i)[2] # Kite
+    # ii = dir_ls(i, type = "directory", regexp = "Footrope")
+    # ii = dir_ls(i, type = "directory", regexp = "Kite") 
+    
+    # Print update message
+    cat("Processing", ii, "\n")
+    
+    # Create progress bar
+    pb <- progress_bar$new(total = length(dir_ls(ii)), 
+                           format = "[:bar] :percent :eta",
+                           width = 50)
     
     for (iii in dir_ls(ii)){
       # iii = dir_ls(ii)[1]
@@ -178,8 +190,9 @@ for (i in dir_ls(here("Data/TDR"))) {
         # mutate(time     = force_tz(time, tz = tdr.tz.kite[tdr.haul])) %>% # Define original time
         # # Convert to UTC and apply offset
         # mutate(time     = with_tz(time, tzone = "UTC") + hours(tdr.offset.k[tdr.haul]))
-      
         
+        # Update progress bar
+        pb$tick()
         
       } else if (str_detect(tolower(path_ext(iii)),"asc")) {
         # Extract TDR data from ASCII file
@@ -188,13 +201,38 @@ for (i in dir_ls(here("Data/TDR"))) {
       # Combine with data from rest of cruise
       tbl.tdr.cruise <- bind_rows(tbl.tdr.cruise, tbl.tmp)
       
-      beepr::beep(5)
+      # beepr::beep(5)
 
     }
     # Save results
       save(tbl.tdr.cruise, file = here("Output", paste0(basename(i), "_tdr_raw.Rdata")))
       # tbl.tdr.cruise %>% group_by(cruise, haul, loc) %>% tally() %>% View()
       # tbl.tdr.cruise %>% group_by(cruise, haul) %>% summarise(n_tdrs = n_distinct(loc)) %>% View()
+      
+      tdr.info <- read_csv(here("Data/TDR/tdr-info.csv")) %>% 
+        mutate(cruise = as.character(cruise))
+      
+      tdr.plot <- tbl.tdr.cruise %>% 
+        left_join(tdr.info) %>% 
+        mutate(time = force_tz(time, tz = tz),
+               time.utc = with_tz(time, tzone = "UTC") +
+                 years(offset.y) + months(offset.m) + days(offset.d) +
+                 hours(offset.H) + minutes(offset.M)) %>% 
+        arrange(loc, time)
+      
+      tdr.plot %>% 
+        filter(haul == 29) %>% 
+        group_by(haul,loc) %>% 
+        summarise(min.time = min(time.utc),
+                  max.time = max(time.utc))
+      
+      haul.min <- 1
+      haul.max <- haul.min + 29
+      
+      # Plot results
+      ggplot(filter(tdr.plot, between(haul, haul.min, haul.max)), 
+             aes(time.utc, depth, group = loc, colour = loc)) + 
+        geom_path() + facet_wrap(~haul, scales = "free", nrow = 5, ncol = 6)
   }
   
   # Read RSK/ASC files
