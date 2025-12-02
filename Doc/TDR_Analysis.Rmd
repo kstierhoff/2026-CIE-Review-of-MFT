@@ -220,13 +220,16 @@ for (i in dir_ls(here("Data/TDR"), type = "directory")) {
                  hours(offset.H) + minutes(offset.M)) %>% 
         arrange(loc, time)
       
+      # Get time info for comparison with trawl database
       tdr.plot %>% 
-        filter(haul == 29) %>% 
-        group_by(haul,loc) %>% 
+        filter(haul == 77) %>% 
+        group_by(cruise, haul,loc) %>% 
         summarise(min.time = min(time.utc),
-                  max.time = max(time.utc))
+                  max.time = max(time.utc)) %>% 
+        left_join(select(haul, cruise, haul, equilibriumTime)) %>% 
+        mutate(time.diff = -difftime(min.time, equilibriumTime, units = "hours"))
       
-      haul.min <- 1
+      haul.min <- 61
       haul.max <- haul.min + 29
       
       # Plot results
