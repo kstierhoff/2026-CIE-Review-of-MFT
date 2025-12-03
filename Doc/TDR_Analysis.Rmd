@@ -143,7 +143,7 @@ tdr.info <- read_csv(here("Data/TDR/tdr-info.csv")) %>%
 
 # For each directory in Data/TDR (grouped by survey)
 for (i in dir_ls(here("Data/TDR"), type = "directory")) {
-  i = dir_ls(here("Data/TDR"), type = "directory")[1]
+  # i = dir_ls(here("Data/TDR"), type = "directory")[1]
   tbl.tdr.cruise <- data.frame()
   
   # For each location (Kite/Footrope)
@@ -200,15 +200,12 @@ for (i in dir_ls(here("Data/TDR"), type = "directory")) {
       
       # Combine with data from rest of cruise
       tbl.tdr.cruise <- bind_rows(tbl.tdr.cruise, tbl.tmp)
-      
-      # beepr::beep(5)
-      
     }
-    # Save results
-    save(tbl.tdr.cruise, file = here("Output", paste0(basename(i), "_tdr_raw.Rdata")))
-    # tbl.tdr.cruise %>% group_by(cruise, haul, loc) %>% tally() %>% View()
-    # tbl.tdr.cruise %>% group_by(cruise, haul) %>% summarise(n_tdrs = n_distinct(loc)) %>% View()
   }
+  
+  # Save results
+  save(tbl.tdr.cruise, file = here("Output", paste0(basename(i), "_tdr_raw.Rdata")))
+  # tbl.tdr.cruise %>% group_by(cruise, haul, loc) %>% tally() %>% View()
   
   # Read RSK/ASC files
   ## If ASC file(pre-20xx)
@@ -218,58 +215,62 @@ for (i in dir_ls(here("Data/TDR"), type = "directory")) {
   # Combine data from cruise with all data
   tbl.tdr.all <- bind_rows(tbl.tdr.all, tbl.tdr.cruise)
 }
+
+save(tbl.tdr.all, file = here("Output/all_tdr_raw.Rdata"))
+
+beepr::beep(5)
 ```
 
 ```{r plot-tdr-results, eval=FALSE}
 # Plot results
 tdr.info <- read_csv(here("Data/TDR/tdr-info.csv")) %>% 
-    mutate(cruise = as.character(cruise))
-  
-  tdr.plot <- tbl.tdr.cruise %>% 
-    left_join(tdr.info) %>% 
-    mutate(time = force_tz(time, tz = tz),
-           time.utc = with_tz(time, tzone = "UTC") +
-             years(offset.y) + months(offset.m) + days(offset.d) +
-             hours(offset.H) + minutes(offset.M)) %>% 
-    mutate(depth = depth + offset.z)  %>% 
-    arrange(loc, time)
-  
-  # Get time info for comparison with trawl database
-  tdr.plot %>%
-    filter(haul %in% c(90)) %>%
-    group_by(cruise, haul,loc) %>%
-    summarise(min.time = min(time.utc),
-              max.time = max(time.utc)) %>%
-    left_join(select(haul, cruise, haul, netInWaterTime, equilibriumTime)) %>%
-    mutate(time.diff = -difftime(min.time, netInWaterTime, units = "hours"))
-  
-  haul.min <- 1
-  haul.max <- haul.min + 29
-  
-  tdr.plot.sub <- filter(tdr.plot, between(haul, haul.min, haul.max))
-  
-  trawl.window <- haul %>% 
-    filter(between(haul, haul.min, haul.max),
-           cruise %in% unique(tdr.plot$cruise))
-  
-  # Plot results
-  ggplot() + 
-    geom_hline(yintercept = 0) +
-    geom_path(data = tdr.plot.sub, 
-              aes(time.utc, depth, group = loc, colour = loc)) +
-    geom_rect(data = trawl.window,
-              aes(xmin = equilibriumTime,
-                  xmax = haulBackTime,
-                  ymin = -60,
-                  ymax = 5),
-              fill = 'gray70', alpha = 0.5) +
-    geom_rect(data = trawl.window,
-              aes(xmin = netInWaterTime,
-                  xmax = netOnDeckTime,
-                  ymin = -60,
-                  ymax = 5), fill = NA,
-              colour = 'gray50', linetype = "dashed", alpha = 0.5) +
-    facet_wrap(~haul, scales = "free", nrow = 5, ncol = 6) 
+  mutate(cruise = as.character(cruise))
+
+tdr.plot <- tbl.tdr.cruise %>% 
+  left_join(tdr.info) %>% 
+  mutate(time = force_tz(time, tz = tz),
+         time.utc = with_tz(time, tzone = "UTC") +
+           years(offset.y) + months(offset.m) + days(offset.d) +
+           hours(offset.H) + minutes(offset.M)) %>% 
+  mutate(depth = depth + offset.z)  %>% 
+  arrange(loc, time)
+
+# Get time info for comparison with trawl database
+tdr.plot %>%
+  filter(haul %in% c(90)) %>%
+  group_by(cruise, haul,loc) %>%
+  summarise(min.time = min(time.utc),
+            max.time = max(time.utc)) %>%
+  left_join(select(haul, cruise, haul, netInWaterTime, equilibriumTime)) %>%
+  mutate(time.diff = -difftime(min.time, netInWaterTime, units = "hours"))
+
+haul.min <- 1
+haul.max <- haul.min + 29
+
+tdr.plot.sub <- filter(tdr.plot, between(haul, haul.min, haul.max))
+
+trawl.window <- haul %>% 
+  filter(between(haul, haul.min, haul.max),
+         cruise %in% unique(tdr.plot$cruise))
+
+# Plot results
+ggplot() + 
+  geom_hline(yintercept = 0) +
+  geom_path(data = tdr.plot.sub, 
+            aes(time.utc, depth, group = loc, colour = loc)) +
+  geom_rect(data = trawl.window,
+            aes(xmin = equilibriumTime,
+                xmax = haulBackTime,
+                ymin = -60,
+                ymax = 5),
+            fill = 'gray70', alpha = 0.5) +
+  geom_rect(data = trawl.window,
+            aes(xmin = netInWaterTime,
+                xmax = netOnDeckTime,
+                ymin = -60,
+                ymax = 5), fill = NA,
+            colour = 'gray50', linetype = "dashed", alpha = 0.5) +
+  facet_wrap(~haul, scales = "free", nrow = 5, ncol = 6) 
 ```
 
 
