@@ -37,7 +37,7 @@ process.asc  <- T # Process Seabird TDR files (.asc format)
 process.tv80 <- T # Process Simrad TV80 data
 
 # Usually F; set T to reprocess all TDR/TV80 files
-process.tdr.all   <- T # Process all TDR files 
+process.tdr.all   <- F # Process all TDR files 
 process.tv80.all  <- T # Process all TV80 files
 
 get.db      <- F # Extract data from trawl database (F for testing)
@@ -134,111 +134,202 @@ if (copy.files) {
 # Process TDR files
 
 ```{r process-tdr-files}
-# Create tbl for all TDR data
-tbl.tdr.all <- data.frame()
-
-# Read TDR info file for fixing date/time/etc.
-tdr.info <- read_csv(here("Data/TDR/tdr-info.csv")) %>% 
-  mutate(cruise = as.character(cruise))
-
-# For each directory in Data/TDR (grouped by survey)
-for (i in dir_ls(here("Data/TDR"), type = "directory")) {
-  # i = dir_ls(here("Data/TDR"), type = "directory")[1]
-  tbl.tdr.cruise <- data.frame()
+if (process.tdr.all) {
+  # Create tbl for all TDR data
+  tbl.tdr.all <- data.frame()
   
-  # For each location (Kite/Footrope)
-  for (ii in dir_ls(i)) {
-    # ii = dir_ls(i, type = "directory", regexp = "Footrope")
-    # ii = dir_ls(i, type = "directory", regexp = "Kite") 
+  # Read TDR info file for fixing date/time/etc.
+  tdr.info <- read_csv(here("Data/TDR/tdr-info.csv")) %>% 
+    mutate(cruise = as.character(cruise))
+  
+  # For each directory in Data/TDR (grouped by survey)
+  for (i in dir_ls(here("Data/TDR"), type = "directory")) {
+    # i = dir_ls(here("Data/TDR"), type = "directory")[1]
+    tbl.tdr.cruise <- data.frame()
     
-    # Print update message
-    cat("Processing", ii, "\n")
-    
-    # Create progress bar
-    pb <- progress_bar$new(total = length(dir_ls(ii)), 
-                           format = "[:bar] :percent :eta",
-                           width = 50)
-    
-    for (iii in dir_ls(ii)){
-      # iii = dir_ls(ii)[1]
+    # For each location (Kite/Footrope)
+    for (ii in dir_ls(i, type = "directory")) {
+      # ii = dir_ls(i, type = "directory", regexp = "Footrope")
+      # ii = dir_ls(i, type = "directory", regexp = "Kite") 
       
-      # # Rename files
-      # files_to_rename <- dir_ls(ii) # Lists all TDR files
-      # new_names <- stringr::str_replace(files_to_rename, "2307RL", "202307RL")
-      # 
-      # # Renaming multiple files
-      # file_move(path = files_to_rename, new_path = new_names)
+      # Print update message
+      cat("Processing", ii, "\n")
       
-      if (str_detect(tolower(path_ext(iii)),"rsk")) {
-        # Extract TDR data from RSK file
-        # Read kite TDR file
-        rsk.tmp <- read.rsk(iii)
+      # Create progress bar
+      pb <- progress_bar$new(total = length(dir_ls(ii)), 
+                             format = "[:bar] :percent :eta",
+                             width = 50)
+      
+      for (iii in dir_ls(ii)){
+        # iii = dir_ls(ii)[1]
         
-        # Create temporary variables
-        tdr.filename <- path_file(rsk.tmp@metadata$filename)
-        tdr.cruise   <- str_sub(tdr.filename, 1,6)
-        tdr.haul     <- as.numeric(str_sub(tdr.filename, 
-                                           nchar(tdr.cruise) + 3, 
-                                           nchar(tdr.cruise) + 5))
+        # # Rename files
+        # files_to_rename <- dir_ls(ii) # Lists all TDR files
+        # new_names <- stringr::str_replace(files_to_rename, "2307RL", "202307RL")
+        # 
+        # # Renaming multiple files
+        # file_move(path = files_to_rename, new_path = new_names)
         
-        tbl.tmp <- as_tibble(rsk.tmp@data) %>% 
-          mutate(filename = tdr.filename,
-                 cruise   = tdr.cruise, 
-                 haul     = tdr.haul,
-                 depth    = surveyR::calc_depth(mean.lat, pressure*100),
-                 loc      = ifelse(str_detect(iii, "FR.rsk"), "Footrope", "Kite"))
-        # mutate(time     = force_tz(time, tz = tdr.tz.kite[tdr.haul])) %>% # Define original time
-        # # Convert to UTC and apply offset
-        # mutate(time     = with_tz(time, tzone = "UTC") + hours(tdr.offset.k[tdr.haul]))
+        if (str_detect(tolower(path_ext(iii)),"rsk")) {
+          # Extract TDR data from RSK file
+          # Read kite TDR file
+          rsk.tmp <- read.rsk(iii)
+          
+          # Create temporary variables
+          tdr.filename <- path_file(rsk.tmp@metadata$filename)
+          tdr.cruise   <- str_sub(tdr.filename, 1,6)
+          tdr.haul     <- as.numeric(str_sub(tdr.filename, 
+                                             nchar(tdr.cruise) + 3, 
+                                             nchar(tdr.cruise) + 5))
+          
+          tbl.tmp <- as_tibble(rsk.tmp@data) %>% 
+            mutate(filename = tdr.filename,
+                   cruise   = tdr.cruise, 
+                   haul     = tdr.haul,
+                   depth    = surveyR::calc_depth(mean.lat, pressure*100),
+                   loc      = ifelse(str_detect(iii, "FR.rsk"), "Footrope", "Kite"))
+          # mutate(time     = force_tz(time, tz = tdr.tz.kite[tdr.haul])) %>% # Define original time
+          # # Convert to UTC and apply offset
+          # mutate(time     = with_tz(time, tzone = "UTC") + hours(tdr.offset.k[tdr.haul]))
+          
+          # Update progress bar
+          pb$tick()
+          
+        } else if (str_detect(tolower(path_ext(iii)),"asc")) {
+          # Extract TDR data from ASCII file
+        }
         
-        # Update progress bar
-        pb$tick()
-        
-      } else if (str_detect(tolower(path_ext(iii)),"asc")) {
-        # Extract TDR data from ASCII file
+        # Combine with data from rest of cruise
+        tbl.tdr.cruise <- bind_rows(tbl.tdr.cruise, tbl.tmp)
       }
+    }
+    
+    # Save results
+    save(tbl.tdr.cruise, file = here(i, paste0(basename(i), "_tdr_raw.Rdata")))
+    # tbl.tdr.cruise %>% group_by(cruise, haul, loc) %>% tally() %>% View()
+    
+    # Read RSK/ASC files
+    ## If ASC file(pre-20xx)
+    
+    ## If RSK file (20xx-present)
+    
+    # Combine data from cruise with all data
+    tbl.tdr.all <- bind_rows(tbl.tdr.all, tbl.tdr.cruise)
+  }
+  
+  # Save processing results
+  save(tbl.tdr.all, file = here("Data/TDR/all_tdr_raw.Rdata"))
+  
+  # Apply time fix to TDR data
+  tbl.tdr.all <- tbl.tdr.all %>% 
+    left_join(tdr.info) %>% 
+    mutate(time = force_tz(time, tz = tz),
+           time.utc = with_tz(time, tzone = "UTC") +
+             years(offset.y) + months(offset.m) + days(offset.d) +
+             hours(offset.H) + minutes(offset.M)) %>% 
+    mutate(depth = depth + offset.z)  %>% 
+    mutate(key = paste(cruise, haul)) %>% 
+    arrange(loc, time.utc)
+  
+  # Save corrected results
+  save(tbl.tdr.all, file = here("Data/TDR/all_tdr.Rdata"))
+  
+} else {
+  load(here("Data/TDR/all_tdr.Rdata"))
+}
+
+if (process.tdr.all) {
+  # Extract data during fishing
+  # Create df for storing TDR data
+  tdr.fishing <- data.frame()
+  
+  # # Create progress bar
+  # pb <- progress_bar$new(total = length(unique(tbl.tdr.all$key)), 
+  #                        format = "[:bar] :percent :eta",
+  #                        width = 50)
+  
+  # Extract fishing data
+  for (i in unique(tbl.tdr.all$key)) {
+    # For testing
+    # i = unique(tbl.all$key)[1]
+    # 
+    # # Update progress bar
+    # pb$tick()
+    
+    # Get haul info
+    haul.tmp <- haul %>%
+      mutate(key = paste(cruise, haul)) %>% 
+      filter(key == i)
+    
+    # Subset TDR data and extract fishing data
+    tdr.tmp <- tbl.tdr.all %>%
+      filter(key == i) %>% 
+      filter(between(time.utc, haul.tmp$equilibriumTime, haul.tmp$haulBackTime)) %>% 
+      select(haul, time.utc, loc, depth)
+    
+    if ("Kite" %in% tdr.tmp$loc & "Footrope" %in% tdr.tmp$loc) {
+      # For hauls that have both kite and footrope TDRs
+      # Calculate relative time from start of fishing
+      tdr.tmp <- tdr.tmp %>% 
+        pivot_wider(names_from = loc, values_from = depth) %>% 
+        mutate(time.diff = c(0, diff(time.utc)),
+               time.cum  = cumsum(time.diff)/60,
+               height = Kite - Footrope) %>% 
+        mutate(key = i)
       
-      # Combine with data from rest of cruise
-      tbl.tdr.cruise <- bind_rows(tbl.tdr.cruise, tbl.tmp)
+      # Combine results
+      tdr.fishing <- bind_rows(tdr.tmp, tdr.fishing)
+      
+      # # Plot TDR data
+      # plot.tdr <- ggplot(tdr.tmp) +
+      #   geom_path(aes(time.cum, Kite), colour = "red") +
+      #   geom_path(aes(time.cum, Footrope), colour = "blue") +
+      #   labs(x = "Cumulative time (mins)", y = "Depth (m)",
+      #        title = paste("Cruise:", unlist(strsplit(i," "))[1],
+      #                      "Haul:", unlist(strsplit(i," "))[2]))
+      # 
+      # # Plot vertical opening (height)
+      # plot.spread <- ggplot(tdr.tmp) +
+      #   geom_path(aes(time.cum, height), colour = "green") +
+      #   labs(x = "Cumulative time (mins)", y = "Opening height (m)")
+      # 
+      # # Combine plots
+      # plot.all <- plot.tdr / plot.spread
     }
   }
   
-  # Save results
-  save(tbl.tdr.cruise, file = here("Output", paste0(basename(i), "_tdr_raw.Rdata")))
-  # tbl.tdr.cruise %>% group_by(cruise, haul, loc) %>% tally() %>% View()
-  
-  # Read RSK/ASC files
-  ## If ASC file(pre-20xx)
-  
-  ## If RSK file (20xx-present)
-  
-  # Combine data from cruise with all data
-  tbl.tdr.all <- bind_rows(tbl.tdr.all, tbl.tdr.cruise)
+  # Save processed data
+  save(tdr.fishing, file = here("Data/TDR/tdr_data_fishing.Rdata"))
+} else {
+  # Load processed data
+  load(here("Data/TDR/tdr_data_fishing.Rdata"))
 }
-
-save(tbl.tdr.all, file = here("Output/all_tdr_raw.Rdata"))
-
-beepr::beep(5)
 ```
 
-```{r plot-tdr-results, eval=FALSE}
-# Plot results
-tdr.info <- read_csv(here("Data/TDR/tdr-info.csv")) %>% 
-  mutate(cruise = as.character(cruise))
+```{r}
 
-tdr.plot <- tbl.tdr.cruise %>% 
-  left_join(tdr.info) %>% 
-  mutate(time = force_tz(time, tz = tz),
-         time.utc = with_tz(time, tzone = "UTC") +
-           years(offset.y) + months(offset.m) + days(offset.d) +
-           hours(offset.H) + minutes(offset.M)) %>% 
-  mutate(depth = depth + offset.z)  %>% 
-  arrange(loc, time)
+```
+
+
+```{r plot-tdr-results, eval=FALSE}
+# # Plot results
+# tdr.info <- read_csv(here("Data/TDR/tdr-info.csv")) %>% 
+#   mutate(cruise = as.character(cruise))
+
+tdr.plot <- tbl.tdr.all %>% 
+  # left_join(tdr.info) %>% 
+  # mutate(time = force_tz(time, tz = tz),
+  #        time.utc = with_tz(time, tzone = "UTC") +
+  #          years(offset.y) + months(offset.m) + days(offset.d) +
+  #          hours(offset.H) + minutes(offset.M)) %>% 
+  # mutate(depth = depth + offset.z)  %>% 
+  # arrange(loc, time) %>% 
+  filter(cruise == "202103")
 
 # Get time info for comparison with trawl database
-tdr.plot %>%
-  filter(haul %in% c(90)) %>%
-  group_by(cruise, haul,loc) %>%
+tdr.summary <- tdr.plot %>%
+  filter(haul %in% c(1)) %>%
+  group_by(cruise, haul, loc) %>%
   summarise(min.time = min(time.utc),
             max.time = max(time.utc)) %>%
   left_join(select(haul, cruise, haul, netInWaterTime, equilibriumTime)) %>%
