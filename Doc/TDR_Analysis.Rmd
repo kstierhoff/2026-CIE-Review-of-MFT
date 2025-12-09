@@ -265,7 +265,7 @@ if (process.tdr.all) {
     tdr.tmp <- tbl.tdr.all %>%
       filter(key == i) %>% 
       filter(between(time.utc, haul.tmp$equilibriumTime, haul.tmp$haulBackTime)) %>% 
-      select(haul, time.utc, loc, depth)
+      select(cruise, haul, time.utc, loc, depth)
     
     if ("Kite" %in% tdr.tmp$loc & "Footrope" %in% tdr.tmp$loc) {
       # For hauls that have both kite and footrope TDRs
@@ -306,7 +306,45 @@ if (process.tdr.all) {
 }
 ```
 
-```{r}
+```{r plot-fishing-data}
+# Define gear type
+tdr.fishing <- tdr.fishing %>% 
+  mutate(gear.type = case_when(
+    cruise %in% c("202407, 202506") ~ "MFT",
+    TRUE ~ "Nordic"
+  ))
+
+# Subset tdr.fishing per cruise
+tdr.fishing.sub <- filter(tdr.fishing, cruise == "202407")
+
+ggplot(filter(tdr.fishing.sub, haul == 133)) +
+  geom_path(aes(time.cum, Kite, group = haul), colour = "red") +
+  geom_path(aes(time.cum, Footrope, group = haul), colour = "blue") +
+  labs(x = "Cumulative time (mins)", y = "Depth (m)", 
+       title = paste("Cruise: ", unique(tdr.fishing.sub$cruise),
+                     "Gear type: ", unique(tdr.fishing.sub$gear.type)))
+
+tmp.plot <- ggplot(tdr.fishing.sub) +
+  geom_path(aes(time.cum, height, group = haul), colour = "green") +
+  labs(x = "Cumulative time (mins)", y = "Opening height (m)") 
+
+plotly::ggplotly(tmp.plot)
+
+ggplot(filter(tdr.fishing, time.cum < 45)) +
+  geom_path(aes(time.cum, Kite, group = haul), colour = "red") +
+  geom_path(aes(time.cum, Footrope, group = haul), colour = "blue") +
+  facet_wrap(~cruise, nrow = 2)
+
+ggsave(filename = here("Figs/fig_tdr_depths_all_facet.png"),
+       width = 10, height = 10)
+
+ggplot(filter(tdr.fishing, time.cum < 45)) +
+# ggplot(filter(tdr.fishing, time.cum < 45, height > 0)) +
+  geom_path(aes(time.cum, height, group = haul), colour = "green") +
+  facet_wrap(~cruise, nrow = 2)
+
+ggsave(filename = here("Figs/fig_tdr_heights_all_facet.png"),
+       width = 10, height = 10)
 
 ```
 
