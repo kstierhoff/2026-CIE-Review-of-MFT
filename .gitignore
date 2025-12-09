@@ -6,6 +6,7 @@
 *.jpg
 *.jpeg
 *.rsk
+*.rds
 *.Rdata
 Figs/*
 Output/*
