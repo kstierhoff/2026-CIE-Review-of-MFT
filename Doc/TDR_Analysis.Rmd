@@ -314,15 +314,15 @@ tdr.fishing <- tdr.fishing %>%
     TRUE ~ "Nordic"
   ))
 
-# Subset tdr.fishing per cruise
-tdr.fishing.sub <- filter(tdr.fishing, cruise == "202407")
-
-ggplot(filter(tdr.fishing.sub, haul == 133)) +
-  geom_path(aes(time.cum, Kite, group = haul), colour = "red") +
-  geom_path(aes(time.cum, Footrope, group = haul), colour = "blue") +
-  labs(x = "Cumulative time (mins)", y = "Depth (m)", 
-       title = paste("Cruise: ", unique(tdr.fishing.sub$cruise),
-                     "Gear type: ", unique(tdr.fishing.sub$gear.type)))
+# # Subset tdr.fishing per cruise
+# tdr.fishing.sub <- filter(tdr.fishing, cruise == "202407")
+# 
+# ggplot(filter(tdr.fishing.sub, haul == 133)) +
+#   geom_path(aes(time.cum, Kite, group = haul), colour = "red") +
+#   geom_path(aes(time.cum, Footrope, group = haul), colour = "blue") +
+#   labs(x = "Cumulative time (mins)", y = "Depth (m)", 
+#        title = paste("Cruise: ", unique(tdr.fishing.sub$cruise),
+#                      "Gear type: ", unique(tdr.fishing.sub$gear.type)))
 
 tmp.plot <- ggplot(tdr.fishing.sub) +
   geom_path(aes(time.cum, height, group = haul), colour = "green") +
@@ -331,8 +331,8 @@ tmp.plot <- ggplot(tdr.fishing.sub) +
 plotly::ggplotly(tmp.plot)
 
 ggplot(filter(tdr.fishing, time.cum < 45)) +
-  geom_path(aes(time.cum, Kite, group = haul), colour = "red") +
-  geom_path(aes(time.cum, Footrope, group = haul), colour = "blue") +
+  geom_path(aes(time.cum, Kite, group = haul), colour = "red", alpha = 0.3) +
+  geom_path(aes(time.cum, Footrope, group = haul), colour = "blue", alpha = 0.3) +
   facet_wrap(~cruise, nrow = 2)
 
 ggsave(filename = here("Figs/fig_tdr_depths_all_facet.png"),
