@@ -393,10 +393,17 @@ nav.paths <- nav %>%
   st_cast("LINESTRING")
 
 # Perimeter of an ellipse with a 18m high opening and a 36m wide opening is 87.2m
-# Mouth opening of the Nordic264 was nominally 336m2 (12 meters by 28m)
+# Mouth opening of the Nordic264 was nominally 336m2 (12 meters by 28m), perimeter is 65.7
 # LITZ ET AL.: NORTHERN ANCHOVY ECOLOGY AND DISTRIBUTION CalCOFI Rep., Vol. 49, 2008
 # Mouth opening of the MFT was nominally 648m2 (18 meters by 36m)
 # Pers. comm.: S. Melly
+
+# Per Grok, the area of an ellipse can be approximated by the following equation given a known height and perimeter
+# area = \(\pi b \sqrt{\frac{P^2}{2\pi^2} - b^2}\)
+# b = 9
+# P = 87.2
+# 
+# A <- pi*b*sqrt((P^2)/(2*pi^2)-b^2)
 
 # tdr.fishing <- tdr.fishing %>% 
 #   mutate(time.align = align.time(time.utc, n = 60)) %>% 
