@@ -321,17 +321,114 @@ if (save.figs) {
 }
 ```
 
+# Process navigation data
+
+Hold off on this for now.
+
+```{r get-nav, eval=FALSE}
+if (get.nav) {
+  nav.all <- data.frame()
+  
+  for (j in dir_ls(here("Data/Nav"), regexp = "*.Rdata")) {
+    # j = dir_ls(here("Data/Nav"), regexp = "*.Rdata")[1]
+    
+    # Load nav data file
+    load(j)
+    
+    # Add cruise name to nav data
+    nav <- nav %>% 
+      mutate(cruise = str_extract(j, pattern = "\\d{6}"))
+    
+    # Combine all cruises
+    nav.all <- bind_rows(nav.all, nav)
+  }
+  
+  # Save all nav data
+  saveRDS(nav.all, here("Data/Nav/nav-all.rds"))
+} else {
+  # Load processed nav data
+  nav <- readRDS(here("Data/Nav/nav-all.rds"))
+  # ggplot(nav.all, aes(long, lat, colour = cruise)) + geom_path() + coord_map() + facet_wrap(~cruise)
+}
+
+# Create df for all results
+tdr.nav.all <- data.frame()
+
+for (k in unique(tdr.fishing$cruise)) {
+  # k = "202107"
+  
+  tdr.nav.cruise <- data.frame()
+  
+  tdr.sub <- filter(tdr.fishing, cruise == k)
+  
+  for (kk in unique(tdr.sub$haul)) {
+    # kk=4
+    # Extract TDR data for each haul
+    tdr.tmp <- filter(tdr.sub, haul == kk)
+    
+    # Extract nav data during the fishing period
+    nav.tmp <- filter(nav, between(time, min(tdr.tmp$time.utc), max(tdr.tmp$time.utc))) %>% 
+      mutate(period = "Fishing",
+             cruise = unique(tdr.tmp$cruise),
+             haul = kk)    
+    
+    tdr.nav.cruise <- bind_rows(tdr.nav.cruise, nav.tmp)
+  }
+  
+  tdr.nav.all <- bind_rows(tdr.nav.all, tdr.nav.cruise)
+}
+
+tdr.nav.sf <- tdr.nav.all %>% 
+  st_as_sf(coords = c("long","lat"), crs = 4326) 
+
+tdr.paths.sf <- tdr.nav.sf %>% 
+  group_by(cruise, haul, period) %>% 
+  summarise(do_union = FALSE) %>% 
+  st_cast("LINESTRING")
+
+nav.paths <- nav %>% 
+  st_as_sf(coords = c("long","lat"), crs = 4326) %>% 
+  group_by(cruise) %>% 
+  summarise(do_union = FALSE) %>% 
+  st_cast("LINESTRING")
+
+# Perimeter of an ellipse with a 18m high opening and a 36m wide opening is 87.2m
+# Mouth opening of the Nordic264 was nominally 336m2 (12 meters by 28m)
+# LITZ ET AL.: NORTHERN ANCHOVY ECOLOGY AND DISTRIBUTION CalCOFI Rep., Vol. 49, 2008
+# Mouth opening of the MFT was nominally 648m2 (18 meters by 36m)
+# Pers. comm.: S. Melly
+
+# tdr.fishing <- tdr.fishing %>% 
+#   mutate(time.align = align.time(time.utc, n = 60)) %>% 
+#   left_join(select(nav, time.align = time, SOG, lat, long, cruise.nav = cruise)) %>% 
+#   # Compute distance
+#   mutate() %>% 
+#   # Compute area
+#   mutate() 
+#   # Compute volume
+
+# cruise.name = "202506"
+# 
+# mapview::mapview(filter(nav.paths, cruise == cruise.name),color = "gray40") + 
+#   mapview::mapview(filter(tdr.paths.sf, cruise == cruise.name), color = "green")
+
+# ggplot(tdr.nav.haul, aes(long, lat, group = haul)) + geom_path()
+
+
+# Plot trawl paths
+```
+
 ```{r plot-tdr-results, eval=FALSE}
 # # Plot results
 # tdr.info <- read_csv(here("Data/TDR/tdr-info.csv")) %>% 
 #   mutate(cruise = as.character(cruise))
 
-tdr.plot <- tbl.tdr.all %>% 
+tdr.plot <- tdr.fishing %>% 
   filter(cruise == "202107")
 
 # Get time info for comparison with trawl database
 tdr.summary <- tdr.plot %>%
-  filter(haul %in% c(28)) %>%
+  # filter(haul %in% c(28)) %>%
   group_by(cruise, haul, loc) %>%
   summarise(min.time = min(time.utc),
             max.time = max(time.utc)) %>%
@@ -371,92 +468,6 @@ ggplot() +
                 ymax = 5), fill = NA,
             colour = 'gray50', linetype = "dashed", alpha = 0.5) +
   facet_wrap(~haul, scales = "free", nrow = 5, ncol = 6) 
-```
-
-# Process navigation data
-
-Hold off on this for now.
-
-```{r get-nav, eval=FALSE}
-if (get.nav) {
-  nav.all <- data.frame()
-  
-  for (j in dir_ls(here("Data/Nav"), regexp = "*.Rdata")) {
-    # j = dir_ls(here("Data/Nav"), regexp = "*.Rdata")[1]
-    
-    # Load nav data file
-    load(j)
-    
-    # Add cruise name to nav data
-    nav <- nav %>% 
-      mutate(cruise = str_extract(j, pattern = "\\d{6}"))
-    
-    # Combine all cruises
-    nav.all <- bind_rows(nav.all, nav)
-  }
-  
-  # Save all nav data
-  saveRDS(nav.all, here("Data/Nav/nav-all.rds"))
-} else {
-  # Load processed nav data
-  nav <- readRDS(here("Data/Nav/nav-all.rds"))
-  # ggplot(nav.all, aes(long, lat, colour = cruise)) + geom_path() + coord_map() + facet_wrap(~cruise)
-}
-
-cruise.name <- "202103"
-
-# Add nav data to tdr.fishing
-tdr.sub <- filter(tdr.fishing, cruise == cruise.name)
-nav.paths <- nav %>% 
-  st_as_sf(coords = c("long","lat"), crs = 4326) %>% 
-  group_by(cruise) %>% 
-  summarise(do_union = FALSE) %>% 
-  st_cast("LINESTRING")
-
-# Create df for all results
-tdr.nav.all <- data.frame()
-
-for (k in unique(tdr.fishing$cruise)) {
-  # k = "202107"
-  
-  tdr.nav.cruise <- data.frame()
-  
-  tdr.sub <- filter(tdr.fishing, cruise == k)
-  
-  for (kk in unique(tdr.sub$haul)) {
-    # kk=4
-    # Extract TDR data for each haul
-    tdr.tmp <- filter(tdr.sub, haul == kk)
-    
-    # Extract nav data during the fishing period
-    nav.tmp <- filter(nav, between(time, min(tdr.tmp$time.utc), max(tdr.tmp$time.utc))) %>% 
-      mutate(period = "Fishing",
-             cruise = unique(tdr.tmp$cruise),
-             haul = kk)    
-    
-    tdr.nav.cruise <- bind_rows(tdr.nav.cruise, nav.tmp)
-  }
-  
-  tdr.nav.all <- bind_rows(tdr.nav.all, tdr.nav.cruise)
-}
-
-ggplot(tdr.nav.all, aes(long, lat, group = haul)) + geom_path() + coord_map() + facet_wrap(~cruise, nrow = 1)
-
-tdr.nav.sf <- tdr.nav.haul %>% 
-  st_as_sf(coords = c("long","lat"), crs = 4326) 
-
-tdr.paths.sf <- tdr.nav.sf %>% 
-  group_by(haul, period) %>% 
-  summarise(do_union = FALSE) %>% 
-  st_cast("LINESTRING")
-
-mapview::mapview(filter(nav.paths, cruise == cruise.name),color = "gray20") + 
-  mapview::mapview(tdr.paths.sf, color = "green")
-
-# ggplot(tdr.nav.haul, aes(long, lat, group = haul)) + geom_path()
-
-
-# Plot trawl paths
 ```
 
 
