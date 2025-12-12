@@ -41,7 +41,7 @@ process.tdr.all   <- F # Process all TDR files
 process.tv80.all  <- T # Process all TV80 files
 
 get.db      <- F # Extract data from trawl database (F for testing)
-get.nav     <- T # Download NOAA Ship nav data
+get.nav     <- F # Download NOAA Ship nav data
 save.figs   <- F # Save figures
 ```
 
@@ -264,12 +264,46 @@ if (process.tdr.all) {
     }
   }
   
+  # Arrange TDR data by time
+  tdr.fishing <- tdr.fishing %>% 
+    arrange(cruise, haul, time.utc) %>% 
+    # Define gear type
+    mutate(gear.type = case_when(
+      cruise %in% c("202407, 202506") ~ "MFT",
+      TRUE ~ "Nordic"))
+  
   # Save processed data
   save(tdr.fishing, file = here("Data/TDR/tdr_data_fishing.Rdata"))
+  
 } else {
   # Load processed data
   load(here("Data/TDR/tdr_data_fishing.Rdata"))
 }
+
+# Perimeter of an ellipse with a 18m high opening and a 36m wide opening is 87.2m
+# Mouth opening of the Nordic264 was nominally 336m2 (12 meters by 28m), perimeter is 65.7
+# LITZ ET AL.: NORTHERN ANCHOVY ECOLOGY AND DISTRIBUTION CalCOFI Rep., Vol. 49, 2008
+# Mouth opening of the MFT was nominally 648m2 (18 meters by 36m)
+# Pers. comm.: S. Melly
+
+# Per Grok, the area of an ellipse can be approximated by the following equation given a known height and perimeter
+# area = \(\pi b \sqrt{\frac{P^2}{2\pi^2} - b^2}\)
+# b = 9
+# P = 87.2
+# 
+# A <- pi*b*sqrt((P^2)/(2*pi^2)-b^2)
+
+# Calculate horizontal spread and area
+tdr.fishing <- tdr.fishing %>% 
+  # Calculate spread
+  mutate(P = case_when(
+    gear.type == "MFT" ~ 87.2,
+    gear.type == "Nordic" ~ 65.7,
+    TRUE ~ NA
+  )) %>% 
+  mutate(b = height/2,
+         a = sqrt((P^2/2*pi^2)-b^2))
+
 ```
 
 ```{r debug-tdr-times,eval=FALSE}
@@ -323,7 +357,7 @@ if (save.figs) {
 
 # Process navigation data
 
-Hold off on this for now.
+Load nav data collected during surveys 2021-present.
 
 ```{r get-nav, eval=FALSE}
 if (get.nav) {
