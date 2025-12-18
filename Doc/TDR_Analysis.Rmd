@@ -267,9 +267,10 @@ if (process.tdr.all) {
   # Arrange TDR data by time
   tdr.fishing <- tdr.fishing %>% 
     arrange(cruise, haul, time.utc) %>% 
+    mutate(year = year(time.utc)) %>% 
     # Define gear type
     mutate(gear.type = case_when(
-      cruise %in% c("202407, 202506") ~ "MFT",
+      year > 2023 ~ "MFT",
       TRUE ~ "Nordic"))
   
   # Save processed data
@@ -288,10 +289,10 @@ if (process.tdr.all) {
 
 # Per Grok, the area of an ellipse can be approximated by the following equation given a known height and perimeter
 # area = \(\pi b \sqrt{\frac{P^2}{2\pi^2} - b^2}\)
-# b = 9
-# P = 87.2
-# 
-# A <- pi*b*sqrt((P^2)/(2*pi^2)-b^2)
+b = 9
+P = 87.2
+
+A <- pi*b*sqrt((P^2)/(2*pi^2)-b^2)
 
 # Calculate horizontal spread and area
 tdr.fishing <- tdr.fishing %>% 
@@ -302,7 +303,13 @@ tdr.fishing <- tdr.fishing %>%
     TRUE ~ NA
   )) %>% 
   mutate(b = height/2,
-         a = sqrt((P^2/2*pi^2)-b^2))
+         A = pi*b*sqrt((P^2)/(2*pi^2)-b^2))
+
+tdr.fishing %>% group_by(cruise) %>% 
+  summarise(P = mean(P, na.rm=T),
+            b = mean(b, na.rm=T), 
+            W = mean(b*2, na.rm=T), 
+            A = mean(A, na.rm = T))
 
 ```
 
@@ -333,25 +340,89 @@ tdr.fishing <- tdr.fishing %>%
 ```
 
 ```{r plot-fishing-data}
+# Summarize TDR depth by location and cruise
+tdr.depth.summ.k <- tdr.fishing %>% 
+  group_by(cruise) %>% 
+  summarise(kite.depth = mean(Kite, na.rm = TRUE)) 
+
+tdr.depth.summ.fr <- tdr.fishing %>% 
+  group_by(cruise) %>% 
+  summarise(footrope.depth = mean(Footrope, na.rm = TRUE)) 
+
+tdr.depth.summ <- tdr.depth.summ.k %>% 
+  left_join(tdr.depth.summ.fr)
+
+# Summarize mouth opening by cruise
+tdr.height.summ <- tdr.fishing %>% 
+  group_by(cruise) %>% 
+  summarise(mean.height = mean(height, na.rm = TRUE))
+
+tdr.area.summ <- tdr.fishing %>% 
+  group_by(cruise) %>% 
+  summarise(mean.area = mean(A, na.rm = TRUE))
+
+tdr.summ.haul <- tdr.fishing %>% 
+  group_by(cruise, haul, gear.type) %>% 
+  summarise(mean.area = mean(A, na.rm = TRUE))
+
 if (save.figs) {
   # Save TDR depth plots
   tdr.plot.depths <- ggplot(filter(tdr.fishing, time.cum < 45)) +
-    geom_path(aes(time.cum, Kite, group = haul), colour = "red", alpha = 0.3) +
-    geom_path(aes(time.cum, Footrope, group = haul), colour = "blue", alpha = 0.3) +
-    facet_wrap(~cruise, nrow = 2)
+    geom_path(aes(time.cum, Kite, group = haul), colour = "red", alpha = 0.1) +
+    geom_path(aes(time.cum, Footrope, group = haul), colour = "blue", alpha = 0.1) +
+    # geom_hline(data = tdr.depth.summ.k,
+    #            aes(yintercept = kite.depth), linetype = "dashed") +
+    # geom_hline(data = tdr.depth.summ.fr,
+    #            aes(yintercept = footrope.depth), linetype = "dashed") +
+    geom_rect(data = tdr.depth.summ,
+              aes(xmin = 0,
+                  xmax = 45,
+                  ymin = footrope.depth,
+                  ymax = kite.depth),
+              fill = 'gray70', alpha = 0.1) +
+    geom_rect(data = tdr.depth.summ,
+              aes(xmin = 0,
+                  xmax = 45,
+                  ymin = footrope.depth,
+                  ymax = kite.depth),
+              colour = 'black', linetype = "dashed", alpha = 0.5) +
+    facet_wrap(~cruise, nrow = 2) + 
+    labs(x = "Time fishing (minutes)",
+         y = "Depth (m)") +
+    theme(strip.background = element_rect(fill = "white"),
+          strip.text.x = element_text(face = "bold")) 
   
   ggsave(tdr.plot.depths, 
          filename = here("Figs/fig_tdr_depths_all_facet.png"),
-         width = 10, height = 10)
+         width = 7, height = 7)
   
   tdr.plot.heights <- ggplot(filter(tdr.fishing, time.cum < 45)) +
     # ggplot(filter(tdr.fishing, time.cum < 45, height > 0)) +
-    geom_path(aes(time.cum, height, group = haul), colour = "green") +
-    facet_wrap(~cruise, nrow = 2)
+    geom_path(aes(time.cum, height, group = haul), 
+              colour = "green", alpha = 0.3) +
+    facet_wrap(~cruise, nrow = 2) +
+    labs(x = "Time fishing (minutes)",
+         y = "Vertical opening (m)") +
+    theme(strip.background = element_rect(fill = "white"),
+          strip.text.x = element_text(face = "bold")) 
   
   ggsave(tdr.plot.heights, 
          filename = here("Figs/fig_tdr_heights_all_facet.png"),
-         width = 10, height = 10)
+         width = 7, height = 7)
+  
+  tdr.plot.area <- ggplot(filter(tdr.fishing, time.cum < 45)) +
+    # ggplot(filter(tdr.fishing, time.cum < 45, height > 0)) +
+    geom_path(aes(time.cum, A, group = haul), 
+              colour = "purple", alpha = 0.3) +
+    facet_wrap(~cruise, nrow = 2) +
+    labs(x = "Time fishing (minutes)",
+         y = "Opening area (m^2)") +
+    theme(strip.background = element_rect(fill = "white"),
+          strip.text.x = element_text(face = "bold")) 
+  
+  ggsave(tdr.plot.area, 
+         filename = here("Figs/fig_tdr_areas_all_facet.png"),
+         width = 7, height = 7)
 }
 ```
 
@@ -377,54 +448,91 @@ if (get.nav) {
     nav.all <- bind_rows(nav.all, nav)
   }
   
+  # Create df for all results
+  tdr.nav.all <- data.frame()
+  
+  for (k in unique(tdr.fishing$cruise)) {
+    # k = "202107"
+    
+    tdr.nav.cruise <- data.frame()
+    
+    tdr.sub <- filter(tdr.fishing, cruise == k)
+    
+    for (kk in unique(tdr.sub$haul)) {
+      # kk=4
+      # Extract TDR data for each haul
+      tdr.tmp <- filter(tdr.sub, haul == kk)
+      
+      # Extract nav data during the fishing period
+      nav.tmp <- filter(nav.all, between(time, min(tdr.tmp$time.utc), max(tdr.tmp$time.utc))) %>% 
+        mutate(period = "Fishing",
+               cruise = unique(tdr.tmp$cruise),
+               haul = kk)    
+      
+      tdr.nav.cruise <- bind_rows(tdr.nav.cruise, nav.tmp)
+    }
+    
+    tdr.nav.all <- bind_rows(tdr.nav.all, tdr.nav.cruise)
+  }
+  
+  tdr.nav.sf <- tdr.nav.all %>% 
+    st_as_sf(coords = c("long","lat"), crs = 4326) 
+  
+  tdr.paths.sf <- tdr.nav.sf %>% 
+    group_by(cruise, haul, period) %>% 
+    summarise(do_union = FALSE) %>% 
+    st_cast("LINESTRING") %>% 
+    ungroup() %>% 
+    mutate(distance = st_length(.))
+  
+  nav.paths <- nav.all %>% 
+    st_as_sf(coords = c("long","lat"), crs = 4326) %>% 
+    group_by(cruise) %>% 
+    summarise(do_union = FALSE) %>% 
+    st_cast("LINESTRING")
+  
   # Save all nav data
   saveRDS(nav.all, here("Data/Nav/nav-all.rds"))
+  save(nav.all, tdr.nav.sf, tdr.paths.sf, nav.paths, 
+       file = here("Data/Nav/nav-all.rdata"))
 } else {
   # Load processed nav data
-  nav <- readRDS(here("Data/Nav/nav-all.rds"))
+  nav.all <- readRDS(here("Data/Nav/nav-all.rds"))
+  load(here("Data/Nav/nav-all.rdata"))
   # ggplot(nav.all, aes(long, lat, colour = cruise)) + geom_path() + coord_map() + facet_wrap(~cruise)
 }
 
-# Create df for all results
-tdr.nav.all <- data.frame()
+tdr.distances <- tdr.paths.sf %>% 
+  # st_set_geometry(NULL) %>% 
+  # ungroup() %>% 
+  arrange(cruise, haul) %>% 
+  select(-period)
 
-for (k in unique(tdr.fishing$cruise)) {
-  # k = "202107"
-  
-  tdr.nav.cruise <- data.frame()
-  
-  tdr.sub <- filter(tdr.fishing, cruise == k)
-  
-  for (kk in unique(tdr.sub$haul)) {
-    # kk=4
-    # Extract TDR data for each haul
-    tdr.tmp <- filter(tdr.sub, haul == kk)
-    
-    # Extract nav data during the fishing period
-    nav.tmp <- filter(nav, between(time, min(tdr.tmp$time.utc), max(tdr.tmp$time.utc))) %>% 
-      mutate(period = "Fishing",
-             cruise = unique(tdr.tmp$cruise),
-             haul = kk)    
-    
-    tdr.nav.cruise <- bind_rows(tdr.nav.cruise, nav.tmp)
-  }
-  
-  tdr.nav.all <- bind_rows(tdr.nav.all, tdr.nav.cruise)
-}
+tdr.summ.haul <- tdr.summ.haul %>% 
+  left_join(tdr.distances) %>% 
+  mutate(V = mean.area * distance)
 
-tdr.nav.sf <- tdr.nav.all %>% 
-  st_as_sf(coords = c("long","lat"), crs = 4326) 
+tdr.vol.summ <- tdr.summ.haul %>% 
+  group_by(cruise, gear.type) %>% 
+  summarise(mean.V = mean(V, na.rm = T))
 
-tdr.paths.sf <- tdr.nav.sf %>% 
-  group_by(cruise, haul, period) %>% 
-  summarise(do_union = FALSE) %>% 
-  st_cast("LINESTRING")
+gear.cols <- c("Nordic" = "red", "MFT" = "blue")
 
-nav.paths <- nav %>% 
-  st_as_sf(coords = c("long","lat"), crs = 4326) %>% 
-  group_by(cruise) %>% 
-  summarise(do_union = FALSE) %>% 
-  st_cast("LINESTRING")
+tdr.plot.volumes <- ggplot(tdr.summ.haul, aes(as.numeric(V), fill = gear.type)) +
+  geom_histogram() + 
+  geom_vline(data = tdr.vol.summ, aes(xintercept = as.numeric(mean.V)), 
+             colour = "black", linetype = "dashed", linewidth = 1) +
+  facet_wrap(~cruise, ncol = 1) + 
+  labs(x = "Volume sampled (m^3)",
+       y = "Frequency") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.x = element_text(face = "bold")) 
+
+  ggsave(tdr.plot.volumes, 
+         filename = here("Figs/fig_tdr_volumes_all_facet.png"),
+         width = 5, height = 7)
 
 # Perimeter of an ellipse with a 18m high opening and a 36m wide opening is 87.2m
 # Mouth opening of the Nordic264 was nominally 336m2 (12 meters by 28m), perimeter is 65.7
