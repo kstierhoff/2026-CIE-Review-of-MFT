@@ -3,10 +3,12 @@
 .RData
 .Ruserdata
 *.asc
+*.html
 *.jpg
 *.jpeg
 *.rsk
 *.rds
 *.Rdata
+Doc/images/*
 Figs/*
 Output/*
