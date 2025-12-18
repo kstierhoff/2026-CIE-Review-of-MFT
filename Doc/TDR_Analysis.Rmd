@@ -521,18 +521,59 @@ gear.cols <- c("Nordic" = "red", "MFT" = "blue")
 tdr.plot.volumes <- ggplot(tdr.summ.haul, aes(as.numeric(V), fill = gear.type)) +
   geom_histogram() + 
   geom_vline(data = tdr.vol.summ, aes(xintercept = as.numeric(mean.V)), 
-             colour = "black", linetype = "dashed", linewidth = 1) +
+             colour = "black", linetype = "dashed", linewidth = 0.5) +
   facet_wrap(~cruise, ncol = 1) + 
-  labs(x = "Volume sampled (m^3)",
+  labs(title = "Volume sampled",
+       x = "Volume sampled (m^3)",
        y = "Frequency") +
   scale_fill_manual(name = "Gear type",
                     values = gear.cols) +
   theme(strip.background = element_rect(fill = "white"),
         strip.text.x = element_text(face = "bold")) 
 
-  ggsave(tdr.plot.volumes, 
-         filename = here("Figs/fig_tdr_volumes_all_facet.png"),
-         width = 5, height = 7)
+ggsave(tdr.plot.volumes, 
+       filename = here("Figs/fig_tdr_volumes_all_facet.png"),
+       width = 5, height = 7)
+
+tdr.plot.distances <- ggplot(tdr.summ.haul, aes(as.numeric(distance), fill = gear.type)) +
+  geom_histogram(show.legend = FALSE) +  
+  # geom_vline(data = tdr.vol.summ, aes(xintercept = as.numeric(mean.V)), 
+  #            colour = "black", linetype = "dashed", linewidth = 1) +
+  facet_wrap(~cruise, ncol = 1) + 
+  labs(title = "Haul distances",
+       x = "Haul distance (m)",
+       y = "Frequency") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.x = element_text(face = "bold")) 
+
+ggsave(tdr.plot.distances, 
+       filename = here("Figs/fig_tdr_distances_all_facet.png"),
+       width = 5, height = 7)
+
+tdr.plot.areas <- ggplot(tdr.summ.haul, aes(as.numeric(mean.area), fill = gear.type)) +
+  geom_histogram(show.legend = FALSE) + 
+  # geom_vline(data = tdr.vol.summ, aes(xintercept = as.numeric(mean.V)), 
+  #            colour = "black", linetype = "dashed", linewidth = 1) +
+  facet_wrap(~cruise, ncol = 1) + 
+  labs(title = "Net area",
+       x = "Net area (m^2)",
+       y = "Frequency") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.x = element_text(face = "bold")) 
+
+ggsave(tdr.plot.areas, 
+       filename = here("Figs/fig_tdr_areas_all_facet.png"),
+       width = 5, height = 7)
+
+tdr.plot.combo <- tdr.plot.distances + tdr.plot.areas + tdr.plot.volumes
+
+ggsave(tdr.plot.combo, 
+       filename = here("Figs/fig_tdr_summary_combo.png"),
+       width = 7, height = 7)
 
 # Perimeter of an ellipse with a 18m high opening and a 36m wide opening is 87.2m
 # Mouth opening of the Nordic264 was nominally 336m2 (12 meters by 28m), perimeter is 65.7
