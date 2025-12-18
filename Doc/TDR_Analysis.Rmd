@@ -43,6 +43,9 @@ process.tv80.all  <- F # Process all TV80 files
 get.db      <- F # Extract data from trawl database (F for testing)
 get.nav     <- F # Download NOAA Ship nav data
 save.figs   <- T # Save figures
+
+# Define colors for legend
+gear.cols <- c("Nordic" = "red", "MFT" = "blue")
 ```
 
 # Data preparation
@@ -315,7 +318,15 @@ for (k in unique(tdr.fishing$cruise)) {
 tdr.nav.sf <- tdr.nav.all %>% 
   st_as_sf(coords = c("long","lat"), crs = 4326) 
 
+# Identify hauls with >1 point
+tdr.nav.summ <- tdr.nav.all %>% 
+  group_by(cruise, haul) %>% tally() %>% arrange(n) %>% 
+  filter(n > 1) %>% 
+  mutate(key = paste(cruise, haul))
+
 tdr.paths.sf <- tdr.nav.sf %>% 
+  mutate(key = paste(cruise, haul)) %>% 
+  filter(key %in% tdr.nav.summ$key) %>% 
   group_by(cruise, haul, period) %>% 
   summarise(do_union = FALSE) %>% 
   st_cast("LINESTRING") %>% 
@@ -451,9 +462,6 @@ if (save.figs) {
 ```
 
 ```{r plot-tdr-metrics-cruise}
-# Define colors for legend
-gear.cols <- c("Nordic" = "red", "MFT" = "blue")
-
 # Plot distance histograms
 tdr.plot.distances <- ggplot(tdr.summ.haul, aes(as.numeric(distance), fill = gear.type)) +
   geom_histogram(show.legend = FALSE) +  
@@ -581,43 +589,51 @@ ggsave(tdr.plot.combo.both,
 ### Compare net metrics
 #### Net height
 
-```{r aov-height,eval=FALSE}
+```{r aov-height,eval=TRUE}
 saveRDS(tdr.fishing,   file = here("Output/tdr_fishing.rds"))
 saveRDS(tdr.summ.haul, file = here("Output/tdr_summary.rds"))
 # save(tdr.fishing, tdr.summ.haul, file = here("Output/tdr_for_statistics.Rdata"))
 
-aov.height <- aov(height ~ as.factor(cruise), data = tdr.fishing)
+# aov.height <- aov(height ~ as.factor(cruise), data = tdr.fishing)
+# 
+# summary(aov.height)
+# 
+# plot(TukeyHSD(aov.height))
 
-summary(aov.height)
-
-plot(TukeyHSD(aov.height))
-
-ggplot(tdr.fishing, aes(cruise, height)) + 
+ggplot(tdr.fishing, aes(cruise, height, fill = gear.type)) + 
   geom_boxplot() +
-  labs(x = "Cruise", y = "Height (m)")
+  labs(x = "Cruise", y = "Height (m)") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) 
 ```
 
 #### Distances
 
-```{r,eval=FALSE}
+```{r,eval=TRUE}
 ggplot(tdr.summ.haul, aes(cruise, as.numeric(distance), fill = gear.type)) + 
   geom_boxplot() +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
   labs(x = "Cruise", y = "Distance (m)")
 ```
 
 #### Areas
 
-```{r,eval=FALSE}
+```{r,eval=TRUE}
 ggplot(tdr.summ.haul, aes(cruise, as.numeric(mean.area), fill = gear.type)) + 
   geom_boxplot() +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
   labs(x = "Cruise", y = "Area (m^2)")
 ```
 
 #### Swept area
 
-```{r,eval=FALSE}
+```{r,eval=TRUE}
 ggplot(tdr.summ.haul, aes(cruise, as.numeric(V), fill = gear.type)) + 
   geom_boxplot() +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
   labs(x = "Cruise", y = "Volume sampled (m^3)")
 ```
 
@@ -649,7 +665,7 @@ include_graphics(here("Figs/fig_tdr_heights_all_facet.png"))
 ## Net metric summary
 
 ```{r}
-include_graphics(here("Figs/fig_tdr_summary_combo.png"))
+include_graphics(here("Figs/fig_tdr_summary_all_combo_both.png"))
 ```
 
 # Unused code
