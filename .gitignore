@@ -10,5 +10,6 @@
 *.rds
 *.Rdata
 Doc/images/*
+Doc/rsconnect/*
 Figs/*
 Output/*
