@@ -45,12 +45,13 @@ get.nav     <- F # Download NOAA Ship nav data
 save.figs   <- T # Save figures
 
 # Define colors for legend
-gear.cols <- c("Nordic" = "red", "MFT" = "blue")
+gear.cols <- c("Nordic 264" = "red", "MFT" = "blue")
 ```
 
 # Data preparation
-
 ## Import and process trawl haul data
+
+Information about hauls is extracted from the haul table in the SQL Server trawl database.
 
 ```{r collect-trawl-data}
 if (get.db) {
@@ -104,7 +105,7 @@ mean.lat = mean(haul$startLatDecimal, na.rm = T)
 
 ## Process navigation data
 
-Load nav data collected during surveys 2021-present.
+Navigation data from ERDDAP, recorded at 1-minute resolution, is loaded for surveys 2021-present.
 
 ```{r get-nav}
 if (get.nav) {
@@ -142,8 +143,9 @@ if (get.nav) {
 ```
 
 ## Process TDR files
-
 ### Read and align raw data
+
+Raw TDR files from 2021-present are processed. Many files have clock and time zone errors that must be fixed to align both within and across hauls. The file `Data/tdr-info.csv` contains the time and depth offset values used to align TDR data for each haul, which was guided by the equilibrium and haul back times from the haul data. 
 
 ```{r process-tdr-files}
 if (process.tdr.all) {
@@ -235,6 +237,8 @@ if (process.tdr.all) {
 
 ### Extract fishing data
 
+For each haul, TDR data are extracted during the period that fishing occurred.
+
 ```{r extract-fishing-data}
 if (process.tdr.all) {
   # Extract data during fishing
@@ -277,7 +281,7 @@ if (process.tdr.all) {
     # Define gear type
     mutate(gear.type = case_when(
       year > 2023 ~ "MFT",
-      TRUE ~ "Nordic"))
+      TRUE ~ "Nordic 264"))
   
   # Save processed data
   save(tdr.fishing, file = here("Data/TDR/tdr_data_fishing.Rdata"))
@@ -337,11 +341,18 @@ tdr.paths.sf <- tdr.nav.sf %>%
 
 ### Calculate net metrics
 
-Since the horizontal spread (or semi-major axis, $a$) are not known, the area ($A$) of the net opening is estimated using the following equation for the area of an ellipse:
+The area of the net opening ($A$) can be estimated as the area of an ellipse:
 
-$$A = \pi b \sqrt{\frac{P^2}{2\pi^2} - b^2}$$ where $P$ is the net perimeter at the mouth opening and $b$ is the semi-minor axis, calculated as half of the vertical opening measured by the TDRs.
+$$A = \pi a b$$
 
-The Nordic has an 12 m-high opening and a 28 m-wide opening with a nominal area of 336 m\^2. From that, the perimeter is estimated to be 65.7 m (LITZ ET AL.: NORTHERN ANCHOVY ECOLOGY AND DISTRIBUTION CalCOFI Rep., Vol. 49, 2008).
+where $a$ is the semi-major axis (or half the horizontal dimension, or spread) and $b$ is the semi-minor axis (or half the vertical dimension, or height).
+
+Since estimates of $a$ are not readily available, $A$ is estimated using the following equation for the area of an ellipse:
+
+$$A = \pi b \sqrt{\frac{P^2}{2\pi^2} - b^2}$$ 
+where $P$ is the perimeter of the net opening.
+
+The Nordic 264 has an 12 m-high opening and a 28 m-wide opening with a nominal area of 336 m\^2. From that, the perimeter is estimated to be 65.7 m (LITZ ET AL.: NORTHERN ANCHOVY ECOLOGY AND DISTRIBUTION CalCOFI Rep., Vol. 49, 2008).
 
 The MFT has an 18 m-high opening and a 36 m-wide opening with a nominal area of 648 m\^2. From that, the perimeter is estimated to be 87.2 m (S. Melly, Swan Nets, pers. comm).
 
@@ -351,7 +362,7 @@ tdr.fishing <- tdr.fishing %>%
   # Calculate spread
   mutate(P = case_when(
     gear.type == "MFT" ~ 87.2,
-    gear.type == "Nordic" ~ 65.7,
+    gear.type == "Nordic 264" ~ 65.7,
     TRUE ~ NA
   )) %>% 
   mutate(b = height/2,
@@ -379,27 +390,31 @@ tdr.height.summ <- tdr.fishing %>%
 
 tdr.area.summ <- tdr.fishing %>% 
   group_by(cruise) %>% 
-  summarise(mean.area = mean(A, na.rm = TRUE))
+  summarise(A = mean(A, na.rm = TRUE))
 
 tdr.summ.haul <- tdr.fishing %>% 
   group_by(cruise, haul, gear.type) %>% 
-  summarise(mean.area = mean(A, na.rm = TRUE))
+  summarise(A = mean(A, na.rm = TRUE))
 
 # Combine haul summaries with distances to compute volume sampled or swept area
 tdr.summ.haul <- tdr.summ.haul %>% 
   left_join(select(tdr.paths.sf, cruise, haul, distance)) %>% 
-  mutate(V = mean.area * distance)
+  mutate(V = A * distance)
 
 # Summarise volume/swept area for histogram plots
 tdr.summ.all <- tdr.summ.haul %>% 
   group_by(cruise, gear.type) %>% 
-  summarise(mean.d = mean(distance, na.rm = T),
-            mean.A = mean(mean.area, na.rm = T),
-            mean.V = mean(V, na.rm = T))
+  summarise(distance = mean(distance, na.rm = T),
+            A = mean(A, na.rm = T),
+            V = mean(V, na.rm = T))
 
 ```
 
 ```{r plot-fishing-data}
+# Create df for labeling plots by cruise and gear type
+tdr.labels <- tdr.fishing %>% 
+  group_by(cruise, gear.type) %>% tally()
+
 if (save.figs) {
   # Save TDR depth plots
   tdr.plot.depths <- ggplot(filter(tdr.fishing, time.cum < 45)) +
@@ -421,6 +436,8 @@ if (save.figs) {
                   ymin = footrope.depth,
                   ymax = kite.depth),
               colour = 'black', linetype = "dashed", alpha = 0.5) +
+    geom_text(data = tdr.labels, aes(5, -70, label = gear.type),
+              hjust = 0, fontface = "bold") +
     facet_wrap(~cruise, nrow = 2) + 
     labs(x = "Time fishing (minutes)",
          y = "Depth (m)") +
@@ -435,6 +452,8 @@ if (save.figs) {
     # ggplot(filter(tdr.fishing, time.cum < 45, height > 0)) +
     geom_path(aes(time.cum, height, group = haul), 
               colour = "green", alpha = 0.3) +
+    geom_text(data = tdr.labels, aes(5, -3, label = gear.type),
+              hjust = 0, fontface = "bold") +
     facet_wrap(~cruise, nrow = 2) +
     labs(x = "Time fishing (minutes)",
          y = "Vertical opening (m)") +
@@ -449,6 +468,8 @@ if (save.figs) {
     # ggplot(filter(tdr.fishing, time.cum < 45, height > 0)) +
     geom_path(aes(time.cum, A, group = haul), 
               colour = "purple", alpha = 0.3) +
+    geom_text(data = tdr.labels, aes(5, -75, label = gear.type),
+              hjust = 0, fontface = "bold") +
     facet_wrap(~cruise, nrow = 2) +
     labs(x = "Time fishing (minutes)",
          y = "Opening area (m^2)") +
@@ -465,7 +486,7 @@ if (save.figs) {
 # Plot distance histograms
 tdr.plot.distances <- ggplot(tdr.summ.haul, aes(as.numeric(distance), fill = gear.type)) +
   geom_histogram(show.legend = FALSE) +  
-  geom_vline(data = tdr.summ.all, aes(xintercept = as.numeric(mean.d)),
+  geom_vline(data = tdr.summ.all, aes(xintercept = as.numeric(distance)),
              colour = "black", linetype = "dashed", linewidth = 0.5) +
   facet_wrap(~cruise, ncol = 1) + 
   labs(title = "Haul distances",
@@ -481,9 +502,9 @@ ggsave(tdr.plot.distances,
        width = 5, height = 7)
 
 # Plot area histograms
-tdr.plot.areas <- ggplot(tdr.summ.haul, aes(as.numeric(mean.area), fill = gear.type)) +
+tdr.plot.areas <- ggplot(tdr.summ.haul, aes(as.numeric(A), fill = gear.type)) +
   geom_histogram(show.legend = FALSE) + 
-  geom_vline(data = tdr.summ.all, aes(xintercept = as.numeric(mean.A)),
+  geom_vline(data = tdr.summ.all, aes(xintercept = as.numeric(A)),
              colour = "black", linetype = "dashed", linewidth = 0.5) +
   facet_wrap(~cruise, ncol = 1) + 
   labs(title = "Net area",
@@ -495,13 +516,13 @@ tdr.plot.areas <- ggplot(tdr.summ.haul, aes(as.numeric(mean.area), fill = gear.t
         strip.text.x = element_text(face = "bold")) 
 
 ggsave(tdr.plot.areas, 
-       filename = here("Figs/fig_tdr_areas_all_facet.png"),
+       filename = here("Figs/fig_tdr_areas_all_facet_hist.png"),
        width = 5, height = 7)
 
 # Plot volume histograms
 tdr.plot.volumes <- ggplot(tdr.summ.haul, aes(as.numeric(V), fill = gear.type)) +
   geom_histogram() + 
-  geom_vline(data = tdr.summ.all, aes(xintercept = as.numeric(mean.V)), 
+  geom_vline(data = tdr.summ.all, aes(xintercept = as.numeric(V)), 
              colour = "black", linetype = "dashed", linewidth = 0.5) +
   facet_wrap(~cruise, ncol = 1) + 
   labs(title = "Volume sampled",
@@ -542,7 +563,7 @@ ggsave(tdr.plot.distances.all,
 
 # Plot area histograms
 tdr.plot.areas.all <- ggplot(tdr.summ.haul, 
-                             aes(as.numeric(mean.area),
+                             aes(as.numeric(A),
                                  group = gear.type, fill = gear.type,
                                  alpha = 0.5)) +
   geom_histogram(position = "identity", show.legend = FALSE) +  
@@ -586,62 +607,12 @@ ggsave(tdr.plot.combo.both,
        width = 7, height = 7)
 ```
 
-### Compare net metrics
-#### Net height
-
-```{r aov-height,eval=TRUE}
-saveRDS(tdr.fishing,   file = here("Output/tdr_fishing.rds"))
-saveRDS(tdr.summ.haul, file = here("Output/tdr_summary.rds"))
-# save(tdr.fishing, tdr.summ.haul, file = here("Output/tdr_for_statistics.Rdata"))
-
-# aov.height <- aov(height ~ as.factor(cruise), data = tdr.fishing)
-# 
-# summary(aov.height)
-# 
-# plot(TukeyHSD(aov.height))
-
-ggplot(tdr.fishing, aes(cruise, height, fill = gear.type)) + 
-  geom_boxplot() +
-  labs(x = "Cruise", y = "Height (m)") +
-  scale_fill_manual(name = "Gear type",
-                    values = gear.cols) 
-```
-
-#### Distances
-
-```{r,eval=TRUE}
-ggplot(tdr.summ.haul, aes(cruise, as.numeric(distance), fill = gear.type)) + 
-  geom_boxplot() +
-  scale_fill_manual(name = "Gear type",
-                    values = gear.cols) +
-  labs(x = "Cruise", y = "Distance (m)")
-```
-
-#### Areas
-
-```{r,eval=TRUE}
-ggplot(tdr.summ.haul, aes(cruise, as.numeric(mean.area), fill = gear.type)) + 
-  geom_boxplot() +
-  scale_fill_manual(name = "Gear type",
-                    values = gear.cols) +
-  labs(x = "Cruise", y = "Area (m^2)")
-```
-
-#### Swept area
-
-```{r,eval=TRUE}
-ggplot(tdr.summ.haul, aes(cruise, as.numeric(V), fill = gear.type)) + 
-  geom_boxplot() +
-  scale_fill_manual(name = "Gear type",
-                    values = gear.cols) +
-  labs(x = "Cruise", y = "Volume sampled (m^3)")
-```
-
 # Results
 
-## TDR metrics summary
+For the most part, TDR data have been summarized and compared visually.
 
-```{r net-metric-summary}
+```{r net-metric-summary,eval=FALSE}
+## TDR metrics summary
 # Print summary table
 kable(tdr.fishing %>% group_by(cruise) %>% 
         summarise(P = mean(P, na.rm=T),
@@ -652,30 +623,97 @@ kable(tdr.fishing %>% group_by(cruise) %>%
 
 ## Net depths
 
+The depth of the kite (red) and footrope (blue) TDRs from each cruise and haul are plotted below. The dashed gray boxes indicate the area between the average kite and footrope depth during each cruise. 
+
 ```{r}
 include_graphics(here("Figs/fig_tdr_depths_all_facet.png"))
 ```
 
 ## Net heights
+### Line plots
+
+The vertical opening, or height (kite depth - footrope depth), for each cruise and haul are plotted below.
 
 ```{r}
 include_graphics(here("Figs/fig_tdr_heights_all_facet.png"))
 ```
 
-## Net metric summary
+### Box plots
+
+Box plots of opening heights summarize all of the TDR data for each cruise.
+
+```{r aov-height,eval=TRUE}
+saveRDS(tdr.fishing,   file = here("Output/tdr_fishing.rds"))
+saveRDS(tdr.summ.haul, file = here("Output/tdr_summary.rds"))
+save(tdr.fishing, tdr.summ.haul, file = here("Output/tdr_for_statistics.Rdata"))
+
+ggplot(tdr.fishing, aes(cruise, height, fill = gear.type)) + 
+  geom_boxplot() +
+  labs(x = "Cruise", y = "Height (m)") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) 
+```
+
+## Net areas
+
+The net area for each cruise and haul are plotted below.
+
+```{r}
+include_graphics(here("Figs/fig_tdr_areas_all_facet.png"))
+```
+
+## Distances
+
+Box plots summarize the tow distances for each cruise.
+
+```{r,eval=TRUE}
+ggplot(tdr.summ.haul, aes(cruise, as.numeric(distance), fill = gear.type)) + 
+  geom_boxplot() +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  labs(x = "Cruise", y = "Distance (m)")
+```
+
+## Areas
+
+Box plots summarize the average net areas from each haul for each cruise.
+
+```{r,eval=TRUE}
+ggplot(tdr.summ.haul, aes(cruise, as.numeric(A), fill = gear.type)) + 
+  geom_boxplot() +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  labs(x = "Cruise", y = "Area (m^2)")
+```
+
+## Swept area
+
+Box plots summarize the average swept area (or volumen sampled) from each haul for each cruise.
+
+```{r,eval=TRUE}
+ggplot(tdr.summ.haul, aes(cruise, as.numeric(V), fill = gear.type)) + 
+  geom_boxplot() +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  labs(x = "Cruise", y = "Volume sampled (m^3)")
+```
+
+## Overall summary
+
+The histograms below show the distributions of haul distances, net areas, and volume sampled in each cruise (rows 1-6), and for all hauls for each gear type in the final row.
 
 ```{r}
 include_graphics(here("Figs/fig_tdr_summary_all_combo_both.png"))
 ```
 
+```{r debug-tdr-times,eval=FALSE}
 # Unused code
 
-```{r debug-tdr-times,eval=FALSE}
 # # Define gear type
 # tdr.fishing <- tdr.fishing %>% 
 #   mutate(gear.type = case_when(
 #     cruise %in% c("202407, 202506") ~ "MFT",
-#     TRUE ~ "Nordic"
+#     TRUE ~ "Nordic 264"
 #   ))
 
 # # # Subset tdr.fishing per cruise
