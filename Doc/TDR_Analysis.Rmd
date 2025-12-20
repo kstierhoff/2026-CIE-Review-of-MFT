@@ -347,14 +347,10 @@ $$A = \pi a b$$
 
 where $a$ is the semi-major axis (or half the horizontal dimension, or spread) and $b$ is the semi-minor axis (or half the vertical dimension, or height).
 
-Since estimates of $a$ are not readily available, $A$ is estimated using the following equation for the area of an ellipse:
+Since estimates of $a$ are not readily available, $A$ is estimated using the following equation:
 
 $$A = \pi b \sqrt{\frac{P^2}{2\pi^2} - b^2}$$ 
-where $P$ is the perimeter of the net opening.
-
-The Nordic 264 has an 12 m-high opening and a 28 m-wide opening with a nominal area of 336 m\^2. From that, the perimeter is estimated to be 65.7 m (LITZ ET AL.: NORTHERN ANCHOVY ECOLOGY AND DISTRIBUTION CalCOFI Rep., Vol. 49, 2008).
-
-The MFT has an 18 m-high opening and a 36 m-wide opening with a nominal area of 648 m\^2. From that, the perimeter is estimated to be 87.2 m (S. Melly, Swan Nets, pers. comm).
+where $P$ is the perimeter of the net opening. The Nordic 264 has an 12 m-high opening and a 28 m-wide opening with a nominal area of 336 m\^2. From that, the perimeter is estimated to be 65.7 m (LITZ ET AL.: NORTHERN ANCHOVY ECOLOGY AND DISTRIBUTION CalCOFI Rep., Vol. 49, 2008). The MFT has an 18 m-high opening and a 36 m-wide opening with a nominal area of 648 m\^2. From that, the perimeter is estimated to be 87.2 m (S. Melly, Swan Nets, pers. comm).
 
 ```{r calculate-net-metrics}
 # Calculate horizontal spread and area
