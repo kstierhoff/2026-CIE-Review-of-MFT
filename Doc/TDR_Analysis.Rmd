@@ -2,7 +2,10 @@
 title: "TDR Analysis"
 author: "Kevin L. Stierhoff"
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
 ```{r set-up,echo=F,message=F,warning=F,error=F,include=F}
@@ -658,7 +661,7 @@ The net area for each cruise and haul are plotted below.
 include_graphics(here("Figs/fig_tdr_areas_all_facet.png"))
 ```
 
-## Distances
+## Tow distances
 
 Box plots summarize the tow distances for each cruise.
 
@@ -670,7 +673,7 @@ ggplot(tdr.summ.haul, aes(cruise, as.numeric(distance), fill = gear.type)) +
   labs(x = "Cruise", y = "Distance (m)")
 ```
 
-## Areas
+#### Areas
 
 Box plots summarize the average net areas from each haul for each cruise.
 
@@ -682,7 +685,7 @@ ggplot(tdr.summ.haul, aes(cruise, as.numeric(A), fill = gear.type)) +
   labs(x = "Cruise", y = "Area (m^2)")
 ```
 
-## Swept area
+#### Swept area
 
 Box plots summarize the average swept area (or volumen sampled) from each haul for each cruise.
 
@@ -701,6 +704,104 @@ The histograms below show the distributions of haul distances, net areas, and vo
 ```{r}
 include_graphics(here("Figs/fig_tdr_summary_all_combo_both.png"))
 ```
+
+## CPUE
+
+```{r}
+# tdr.summ.haul <- readRDS(here("Output/tdr_summary.rds"))
+
+catch <- readRDS(here("Data/Trawl/total_catch_by_haul.rds")) %>% 
+  rename(catch.type = Catch) %>% 
+  mutate(cruise = as.character(cruise)) %>% 
+  mutate(totalWeight = replace_na(totalWeight, 0)) %>%  
+  ungroup()
+
+# Filter 
+catch.tot <- filter(catch, catch.type == "Whole catch")
+catch.cps <- filter(catch, catch.type == "CPS catch")
+
+# tdr.summ.haul <- select(tdr.summ.haul, -catch.tot, catch.cps)
+
+# Add catch data to haul summary
+tdr.summ.haul <- tdr.summ.haul %>% 
+  left_join(select(catch.tot, cruise, haul, catch.tot = totalWeight)) %>%
+  left_join(select(catch.cps, cruise, haul, catch.cps = totalWeight)) %>%
+  mutate(distance.km = as.numeric(distance)/1000) %>%
+  mutate(cpue.tot = catch.tot/distance.km,
+         cpue.cps = catch.cps/distance.km,
+         cpue.tot.v = catch.tot/as.numeric(V),
+         cpue.cps.v = catch.cps/as.numeric(V)) %>% 
+  mutate(cpue.tot = replace_na(cpue.tot, 0),
+         cpue.cps = replace_na(cpue.cps, 0),
+         cpue.tot.v = replace_na(cpue.tot.v, 0),
+         cpue.cps.v = replace_na(cpue.cps.v, 0))
+  
+
+cpue.dist.hist.tot <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
+                                    cpue.tot > 0), 
+                        aes(log(cpue.tot+1), fill = gear.type)) + 
+  geom_histogram(show.legend = FALSE) + facet_wrap(~cruise, ncol = 1) + 
+  labs(title = "CPUE (All catch)",
+       x = "log(CPUE + 1)",
+       y = "Frequency") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.x = element_text(face = "bold"))
+
+cpue.vol.hist.tot <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
+                                    cpue.tot.v > 0), 
+                        aes(log(cpue.tot.v+1), fill = gear.type)) + 
+  geom_histogram(show.legend = FALSE) + facet_wrap(~cruise, ncol = 1) + 
+  labs(title = "CPUE (All catch)",
+       x = "log(CPUE + 1)",
+       y = "Frequency") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.x = element_text(face = "bold"))
+
+cpue.dist.hist.cps <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
+                                    cpue.cps > 0), 
+                        aes(log(cpue.cps+1), fill = gear.type)) + 
+  geom_histogram() + facet_wrap(~cruise, ncol = 1) + 
+  labs(title = "CPUE (CPS only)",
+       x = "log(CPUE + 1) (kg/km)",
+       y = "Frequency") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.x = element_text(face = "bold"))
+
+cpue.vol.hist.cps <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
+                                    cpue.cps.v > 0), 
+                        aes(log(cpue.cps.v + 1), fill = gear.type)) + 
+  geom_histogram(show.legend = FALSE) + facet_wrap(~cruise, ncol = 1) + 
+  labs(title = "CPUE (All catch)",
+       x = "log(CPUE + 1)",
+       y = "Frequency") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.x = element_text(face = "bold"))
+
+cpue.dist.hist.combo <- cpue.dist.hist.tot + cpue.dist.hist.cps
+cpue.vol.hist.combo  <- cpue.vol.hist.tot + cpue.vol.hist.cps
+
+ggsave(cpue.dist.hist.combo, 
+       filename = here("Figs/fig_cpue_dist_combo.png"),
+       width = 7, height = 7)
+
+ggsave(cpue.vol.hist.combo, 
+       filename = here("Figs/fig_cpue_vol_combo.png"),
+       width = 7, height = 7)
+
+# ggplot(tdr.summ.haul, aes(cpue.cps)) + geom_histogram()
+# ggplot(filter(tdr.summ.haul, cpue.cps > 0),
+#        aes(cpue.cps)) + geom_histogram()
+```
+
+
 
 ```{r debug-tdr-times,eval=FALSE}
 # Unused code
