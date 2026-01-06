@@ -822,37 +822,63 @@ cpue.comp.tot + cpue.comp.cps
 ```{r}
 ## CPS species
 cps.spp            <- c("Clupea pallasii","Engraulis mordax","Sardinops sagax",
-                        "Scomber japonicus","Trachurus symmetricus", 
-                        "Etrumeus acuminatus")
+                        "Scomber japonicus","Trachurus symmetricus")
 
 fl.spp <- c("Clupea pallasii","Scomber japonicus","Trachurus symmetricus")
 
-sl.spp <-  c("Engraulis mordax","Sardinops sagax","Etrumeus acuminatus")
+sl.spp <-  c("Engraulis mordax","Sardinops sagax")
 
 dat <- lengths %>% 
-  left_join(select(haul, cruise, ship, haul, collection, time = equilibriumTime)) %>% 
+  left_join(select(haul, cruise, ship, haul, collection, time = equilibriumTime, gearType)) %>% 
   left_join(select(spp.codes, species, scientificName, commonName)) %>% 
   mutate(year = year(time)) %>% 
   mutate(season = case_when(
     month(time) < 6 ~ "spring",
     TRUE ~ "summer")) %>% 
-  filter(year >= 2007) %>% 
-  filter(scientificName %in% cps.spp)
+  filter(year > 2008, season == "summer") %>% 
+  filter(scientificName %in% cps.spp) %>% 
+  filter(gearType %in% c("Nordic264","MFT")) 
+
+l.summ.fl <- dat %>%
+  filter(scientificName %in% fl.spp) %>% 
+  filter(!is.na(forkLength_mm)) %>% 
+  group_by(year, gearType, scientificName) %>%
+  summarise(
+    l.lower = quantile(forkLength_mm, probs = 0.05),
+    l.upper = quantile(forkLength_mm, probs = 0.95))
+
+l.summ.sl <- dat %>%
+  filter(scientificName %in% sl.spp) %>% 
+  filter(!is.na(standardLength_mm)) %>% 
+  group_by(year, gearType, scientificName) %>%
+  summarise(
+    l.lower = quantile(standardLength_mm, probs = 0.05),
+    l.upper = quantile(standardLength_mm, probs = 0.95))
 
 ggplot(filter(dat, scientificName %in% sl.spp), 
-       aes(standardLength_mm, group = season, fill = season, position = "identity")) + 
+       aes(standardLength_mm, group = season, fill = gearType, position = "identity")) + 
   geom_histogram() +
+  geom_vline(data = l.summ.sl, aes(xintercept =  l.lower, colour = gearType), linetype = "dashed") +
+  geom_vline(data = l.summ.sl, aes(xintercept =  l.upper, colour = gearType), linetype = "dashed") +
   facet_grid(year ~ scientificName, scales = "free_x")
 
-ggplot(filter(dat, scientificName %in% fl.spp), 
-       aes(forkLength_mm, group = season, fill = season, position = "identity")) + 
-  geom_histogram() +
-  facet_grid(year ~ scientificName, scales = "free")
+ggsave(filename = here("Figs/fig_standartLengths_all.png"),
+       height = 7, width = 7)
 
 ggplot(filter(dat, scientificName %in% fl.spp), 
-       aes(forkLength_mm, group = season, fill = season, position = "identity")) + 
-  geom_density(alpha = 0.5) +
+       aes(forkLength_mm, group = season, fill = gearType, position = "identity")) + 
+  geom_histogram() +
+  geom_vline(data = l.summ.fl, aes(xintercept =  l.lower, colour = gearType), linetype = "dashed") +
+  geom_vline(data = l.summ.fl, aes(xintercept =  l.upper, colour = gearType), linetype = "dashed") +
   facet_grid(year ~ scientificName, scales = "free")
+
+ggsave(filename = here("Figs/fig_forkLengths_all.png"),
+       height = 7, width = 7)
+
+# ggplot(filter(dat, scientificName %in% fl.spp), 
+#        aes(forkLength_mm, group = season, fill = season, position = "identity")) + 
+#   geom_density(alpha = 0.5) +
+#   facet_grid(year ~ scientificName, scales = "free")
 
 ```
 
