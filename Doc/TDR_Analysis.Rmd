@@ -73,13 +73,16 @@ if (get.db) {
                               SERVER="swc-estrella-s")
   
   # Get haul info
-  haul <- dplyr::tbl(trawl.con,"Haul")  %>% dplyr::collect()
+  haul    <- dplyr::tbl(trawl.con,"Haul")  %>% dplyr::collect()
+  lengths <- dplyr::tbl(trawl.con,"Specimen")  %>% dplyr::collect()
+  spp.codes <- dplyr::tbl(trawl.con,"SpeciesCodes")  %>% dplyr::collect()
   
   # Close database channel
   DBI::dbDisconnect(trawl.con)
   
   # Save database data
-  save(haul, file = here::here("Data/Trawl/trawl_data_raw.Rdata"))
+  save(haul, lengths, spp.codes,
+       file = here::here("Data/Trawl/trawl_data_raw.Rdata"))
   
 } else {
   # Load trawl data
@@ -338,8 +341,8 @@ tdr.paths.sf <- tdr.nav.sf %>%
   summarise(do_union = FALSE) %>% 
   st_cast("LINESTRING") %>% 
   ungroup() %>% 
-  mutate(distance = st_length(.)) %>% 
-  filter(as.numeric(distance) > 0)
+  mutate(distance = as.numeric(st_length(.))) %>% 
+  filter(distance > 0)
 ```
 
 ### Calculate net metrics
@@ -707,9 +710,8 @@ include_graphics(here("Figs/fig_tdr_summary_all_combo_both.png"))
 
 ## CPUE
 
-```{r}
+```{r compute-cpue}
 # tdr.summ.haul <- readRDS(here("Output/tdr_summary.rds"))
-
 catch <- readRDS(here("Data/Trawl/total_catch_by_haul.rds")) %>% 
   rename(catch.type = Catch) %>% 
   mutate(cruise = as.character(cruise)) %>% 
@@ -725,46 +727,37 @@ catch.cps <- filter(catch, catch.type == "CPS catch")
 # Add catch data to haul summary
 tdr.summ.haul <- tdr.summ.haul %>% 
   left_join(select(catch.tot, cruise, haul, catch.tot = totalWeight)) %>%
-  left_join(select(catch.cps, cruise, haul, catch.cps = totalWeight)) %>%
-  mutate(distance.km = as.numeric(distance)/1000) %>%
+  left_join(select(catch.cps, cruise, haul, catch.cps = totalWeight)) 
+
+# Compute new statistics
+tdr.summ.haul <- tdr.summ.haul %>% 
+  mutate(distance.km = distance/1000) %>%
   mutate(cpue.tot = catch.tot/distance.km,
          cpue.cps = catch.cps/distance.km,
-         cpue.tot.v = catch.tot/as.numeric(V),
-         cpue.cps.v = catch.cps/as.numeric(V)) %>% 
+         cpue.tot.v = catch.tot/V,
+         cpue.cps.v = catch.cps/V) %>% 
   mutate(cpue.tot = replace_na(cpue.tot, 0),
          cpue.cps = replace_na(cpue.cps, 0),
          cpue.tot.v = replace_na(cpue.tot.v, 0),
          cpue.cps.v = replace_na(cpue.cps.v, 0))
   
-
-cpue.dist.hist.tot <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
-                                    cpue.tot > 0), 
-                        aes(log(cpue.tot+1), fill = gear.type)) + 
-  geom_histogram(show.legend = FALSE) + facet_wrap(~cruise, ncol = 1) + 
+# CPUE plots per distance
+cpue.dist.hist.tot <- ggplot(filter(tdr.summ.haul, !cruise == "202103",
+                                    cpue.tot > 0, !is.na(distance.km)),
+                        aes(log(cpue.tot+1), fill = gear.type)) +
+  geom_histogram(show.legend = FALSE) + facet_wrap(~cruise, ncol = 1) +
   labs(title = "CPUE (All catch)",
-       x = "log(CPUE + 1)",
+       x = "log(CPUE + 1) (kg/km)",
        y = "Frequency") +
   scale_fill_manual(name = "Gear type",
                     values = gear.cols) +
   theme(strip.background = element_rect(fill = "white"),
         strip.text.x = element_text(face = "bold"))
 
-cpue.vol.hist.tot <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
-                                    cpue.tot.v > 0), 
-                        aes(log(cpue.tot.v+1), fill = gear.type)) + 
-  geom_histogram(show.legend = FALSE) + facet_wrap(~cruise, ncol = 1) + 
-  labs(title = "CPUE (All catch)",
-       x = "log(CPUE + 1)",
-       y = "Frequency") +
-  scale_fill_manual(name = "Gear type",
-                    values = gear.cols) +
-  theme(strip.background = element_rect(fill = "white"),
-        strip.text.x = element_text(face = "bold"))
-
-cpue.dist.hist.cps <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
-                                    cpue.cps > 0), 
-                        aes(log(cpue.cps+1), fill = gear.type)) + 
-  geom_histogram() + facet_wrap(~cruise, ncol = 1) + 
+cpue.dist.hist.cps <- ggplot(filter(tdr.summ.haul, !cruise == "202103",
+                                    cpue.cps > 0, !is.na(distance.km)),
+                        aes(log(cpue.cps+1), fill = gear.type)) +
+  geom_histogram() + facet_wrap(~cruise, ncol = 1) +
   labs(title = "CPUE (CPS only)",
        x = "log(CPUE + 1) (kg/km)",
        y = "Frequency") +
@@ -773,22 +766,37 @@ cpue.dist.hist.cps <- ggplot(filter(tdr.summ.haul, !cruise == "202103",
   theme(strip.background = element_rect(fill = "white"),
         strip.text.x = element_text(face = "bold"))
 
-cpue.vol.hist.cps <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
-                                    cpue.cps.v > 0), 
-                        aes(log(cpue.cps.v + 1), fill = gear.type)) + 
+# CPUE plots per volume
+cpue.vol.hist.tot <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
+                                    cpue.tot.v > 0, !is.na(distance.km)), 
+                        aes(cpue.tot.v, fill = gear.type)) + 
   geom_histogram(show.legend = FALSE) + facet_wrap(~cruise, ncol = 1) + 
   labs(title = "CPUE (All catch)",
-       x = "log(CPUE + 1)",
+       x = "CPUE (kg/m^3)",
        y = "Frequency") +
   scale_fill_manual(name = "Gear type",
                     values = gear.cols) +
   theme(strip.background = element_rect(fill = "white"),
         strip.text.x = element_text(face = "bold"))
 
+cpue.vol.hist.cps <- ggplot(filter(tdr.summ.haul, !cruise == "202103", 
+                                    cpue.cps.v > 0, !is.na(distance.km)), 
+                        aes(cpue.cps.v, fill = gear.type)) + 
+  geom_histogram(show.legend = FALSE) + facet_wrap(~cruise, ncol = 1) + 
+  labs(title = "CPUE (CPS only)",
+       x = "CPUE (kg/m^3)",
+       y = "Frequency") +
+  scale_fill_manual(name = "Gear type",
+                    values = gear.cols) +
+  theme(strip.background = element_rect(fill = "white"),
+        strip.text.x = element_text(face = "bold"))
+
+# Combine plots
 cpue.dist.hist.combo <- cpue.dist.hist.tot + cpue.dist.hist.cps
 cpue.vol.hist.combo  <- cpue.vol.hist.tot + cpue.vol.hist.cps
 
-ggsave(cpue.dist.hist.combo, 
+# Save combined plots
+ggsave(cpue.dist.hist.combo,
        filename = here("Figs/fig_cpue_dist_combo.png"),
        width = 7, height = 7)
 
@@ -799,7 +807,55 @@ ggsave(cpue.vol.hist.combo,
 # ggplot(tdr.summ.haul, aes(cpue.cps)) + geom_histogram()
 # ggplot(filter(tdr.summ.haul, cpue.cps > 0),
 #        aes(cpue.cps)) + geom_histogram()
+
+cpue.comp.tot <- ggplot(filter(tdr.summ.haul, !cruise == "202103"), aes(V, catch.tot)) + 
+  geom_point() + facet_wrap(~cruise, ncol = 1) + 
+  labs(title = "All catch")
+
+cpue.comp.cps <- ggplot(filter(tdr.summ.haul, !cruise == "202103"), aes(V, catch.cps)) + 
+  geom_point() + facet_wrap(~cruise, ncol = 1) + 
+  labs(title = "CPS only")
+
+cpue.comp.tot + cpue.comp.cps
 ```
+
+```{r}
+## CPS species
+cps.spp            <- c("Clupea pallasii","Engraulis mordax","Sardinops sagax",
+                        "Scomber japonicus","Trachurus symmetricus", 
+                        "Etrumeus acuminatus")
+
+fl.spp <- c("Clupea pallasii","Scomber japonicus","Trachurus symmetricus")
+
+sl.spp <-  c("Engraulis mordax","Sardinops sagax","Etrumeus acuminatus")
+
+dat <- lengths %>% 
+  left_join(select(haul, cruise, ship, haul, collection, time = equilibriumTime)) %>% 
+  left_join(select(spp.codes, species, scientificName, commonName)) %>% 
+  mutate(year = year(time)) %>% 
+  mutate(season = case_when(
+    month(time) < 6 ~ "spring",
+    TRUE ~ "summer")) %>% 
+  filter(year >= 2007) %>% 
+  filter(scientificName %in% cps.spp)
+
+ggplot(filter(dat, scientificName %in% sl.spp), 
+       aes(standardLength_mm, group = season, fill = season, position = "identity")) + 
+  geom_histogram() +
+  facet_grid(year ~ scientificName, scales = "free_x")
+
+ggplot(filter(dat, scientificName %in% fl.spp), 
+       aes(forkLength_mm, group = season, fill = season, position = "identity")) + 
+  geom_histogram() +
+  facet_grid(year ~ scientificName, scales = "free")
+
+ggplot(filter(dat, scientificName %in% fl.spp), 
+       aes(forkLength_mm, group = season, fill = season, position = "identity")) + 
+  geom_density(alpha = 0.5) +
+  facet_grid(year ~ scientificName, scales = "free")
+
+```
+
 
 
 
