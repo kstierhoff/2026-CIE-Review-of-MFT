@@ -413,9 +413,14 @@ tdr.summ.all <- tdr.summ.haul %>%
 ```
 
 ```{r plot-fishing-data}
+# Summarise hauls by cruise
+tdr.tow.summ <- tdr.fishing %>% group_by(cruise) %>% summarise(nHauls = n_distinct(haul))
+
 # Create df for labeling plots by cruise and gear type
 tdr.labels <- tdr.fishing %>% 
-  group_by(cruise, gear.type) %>% tally()
+  group_by(cruise, gear.type) %>% tally() %>% 
+  left_join(tdr.tow.summ) %>% 
+  mutate(label = paste0(gear.type, " (", nHauls, ")"))
 
 if (save.figs) {
   # Save TDR depth plots
@@ -438,7 +443,7 @@ if (save.figs) {
                   ymin = footrope.depth,
                   ymax = kite.depth),
               colour = 'black', linetype = "dashed", alpha = 0.5) +
-    geom_text(data = tdr.labels, aes(5, -70, label = gear.type),
+    geom_text(data = tdr.labels, aes(5, -70, label = label),
               hjust = 0, fontface = "bold") +
     facet_wrap(~cruise, nrow = 2) + 
     labs(x = "Time fishing (minutes)",
@@ -454,7 +459,7 @@ if (save.figs) {
     # ggplot(filter(tdr.fishing, time.cum < 45, height > 0)) +
     geom_path(aes(time.cum, height, group = haul), 
               colour = "green", alpha = 0.3) +
-    geom_text(data = tdr.labels, aes(5, -3, label = gear.type),
+    geom_text(data = tdr.labels, aes(5, -3, label = label),
               hjust = 0, fontface = "bold") +
     facet_wrap(~cruise, nrow = 2) +
     labs(x = "Time fishing (minutes)",
@@ -470,7 +475,7 @@ if (save.figs) {
     # ggplot(filter(tdr.fishing, time.cum < 45, height > 0)) +
     geom_path(aes(time.cum, A, group = haul), 
               colour = "purple", alpha = 0.3) +
-    geom_text(data = tdr.labels, aes(5, -75, label = gear.type),
+    geom_text(data = tdr.labels, aes(5, -75, label = label),
               hjust = 0, fontface = "bold") +
     facet_wrap(~cruise, nrow = 2) +
     labs(x = "Time fishing (minutes)",
