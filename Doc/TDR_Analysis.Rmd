@@ -837,7 +837,10 @@ dat <- lengths %>%
     TRUE ~ "summer")) %>% 
   filter(year > 2008, season == "summer") %>% 
   filter(scientificName %in% cps.spp) %>% 
-  filter(gearType %in% c("Nordic264","MFT")) 
+  filter(gearType %in% c("Nordic264","MFT")) %>% 
+  mutate(nativeLength_mm = case_when(
+    scientificName %in% fl.spp ~ forkLength_mm,
+    scientificName %in% sl.spp ~ standardLength_mm))
 
 l.summ.fl <- dat %>%
   filter(scientificName %in% fl.spp) %>% 
@@ -855,35 +858,127 @@ l.summ.sl <- dat %>%
     l.lower = quantile(standardLength_mm, probs = 0.05),
     l.upper = quantile(standardLength_mm, probs = 0.95))
 
-ggplot(filter(dat, scientificName %in% sl.spp), 
+l.summ.nl <- dat %>%
+  filter(!is.na(nativeLength_mm)) %>% 
+  group_by(year, gearType, scientificName) %>%
+  summarise(
+    l.lower = quantile(nativeLength_mm, probs = 0.05),
+    l.upper = quantile(nativeLength_mm, probs = 0.95))
+
+sl.plots <- ggplot(filter(dat, scientificName %in% sl.spp), 
        aes(standardLength_mm, group = season, fill = gearType, position = "identity")) + 
   geom_histogram() +
   geom_vline(data = l.summ.sl, aes(xintercept =  l.lower, colour = gearType), linetype = "dashed") +
   geom_vline(data = l.summ.sl, aes(xintercept =  l.upper, colour = gearType), linetype = "dashed") +
   facet_grid(year ~ scientificName, scales = "free_x")
 
-ggsave(filename = here("Figs/fig_standartLengths_all.png"),
+ggsave(sl.plots,
+       filename = here("Figs/fig_standardLengths_all.png"),
        height = 7, width = 7)
 
-ggplot(filter(dat, scientificName %in% fl.spp), 
+fl.plots <- ggplot(filter(dat, scientificName %in% fl.spp), 
        aes(forkLength_mm, group = season, fill = gearType, position = "identity")) + 
   geom_histogram() +
   geom_vline(data = l.summ.fl, aes(xintercept =  l.lower, colour = gearType), linetype = "dashed") +
   geom_vline(data = l.summ.fl, aes(xintercept =  l.upper, colour = gearType), linetype = "dashed") +
   facet_grid(year ~ scientificName, scales = "free")
 
-ggsave(filename = here("Figs/fig_forkLengths_all.png"),
+ggsave(fl.plots,
+       filename = here("Figs/fig_forkLengths_all.png"),
        height = 7, width = 7)
 
-# ggplot(filter(dat, scientificName %in% fl.spp), 
-#        aes(forkLength_mm, group = season, fill = season, position = "identity")) + 
-#   geom_density(alpha = 0.5) +
-#   facet_grid(year ~ scientificName, scales = "free")
+nl.plots <- ggplot(dat, 
+       aes(nativeLength_mm, group = season, fill = gearType, position = "identity")) + 
+  geom_histogram() +
+  geom_vline(data = l.summ.nl, aes(xintercept =  l.lower, colour = gearType), linetype = "dashed") +
+  geom_vline(data = l.summ.nl, aes(xintercept =  l.upper, colour = gearType), linetype = "dashed") +
+  facet_grid(year ~ scientificName, scales = "free")
 
+ggsave(nl.plots,
+       filename = here("Figs/fig_nativeLengths_all.png"),
+       height = 10, width = 10)
+
+l.summ.fl.all <- dat %>%
+  filter(scientificName %in% fl.spp) %>% 
+  filter(!is.na(forkLength_mm)) %>% 
+  group_by(gearType, scientificName) %>%
+  summarise(
+    l.lower = quantile(forkLength_mm, probs = 0.05),
+    l.upper = quantile(forkLength_mm, probs = 0.95))
+
+l.summ.sl.all <- dat %>%
+  filter(scientificName %in% sl.spp) %>% 
+  filter(!is.na(standardLength_mm)) %>% 
+  group_by(gearType, scientificName) %>%
+  summarise(
+    l.lower = quantile(standardLength_mm, probs = 0.05),
+    l.upper = quantile(standardLength_mm, probs = 0.95))
+
+l.summ.nl.all <- dat %>%
+  filter(!is.na(nativeLength_mm)) %>% 
+  group_by(gearType, scientificName) %>%
+  summarise(
+    l.lower = quantile(nativeLength_mm, probs = 0.05),
+    l.upper = quantile(natLength_mm, probs = 0.95))
+
+sl.plots.all <- ggplot(filter(dat, scientificName %in% sl.spp), 
+       aes(standardLength_mm, group = season, fill = gearType, position = "identity")) + 
+  geom_histogram(show.legend = FALSE) +
+  geom_vline(data = l.summ.sl.all, aes(xintercept =  l.lower, colour = gearType), linetype = "dashed", show.legend = FALSE) +
+  geom_vline(data = l.summ.sl.all, aes(xintercept =  l.upper, colour = gearType), linetype = "dashed", show.legend = FALSE) +
+  facet_grid(gearType ~ scientificName, scales = "free_x")
+
+ggsave(sl.plots.all,
+       filename = here("Figs/fig_standardLengths_all_summary.png"),
+       height = 7, width = 7)
+
+fl.plots.all <- ggplot(filter(dat, scientificName %in% fl.spp), 
+       aes(forkLength_mm, group = season, fill = gearType, position = "identity")) + 
+  geom_histogram(show.legend = FALSE) +
+  geom_vline(data = l.summ.fl.all, aes(xintercept =  l.lower, colour = gearType), linetype = "dashed", show.legend = FALSE) +
+  geom_vline(data = l.summ.fl.all, aes(xintercept =  l.upper, colour = gearType), linetype = "dashed", show.legend = FALSE) +
+  facet_grid(gearType ~ scientificName, scales = "free_x")
+
+ggsave(fl.plots.all,
+       filename = here("Figs/fig_forkLengths_all_summary.png"),
+       height = 7, width = 7)
+
+l.plots.combo <- sl.plots.all + fl.plots.all
+
+ggsave(l.plots.combo,
+       filename = here("Figs/fig_lengths_all_summary_combo.png"),
+       height = 7, width = 15)
+
+nl.plots.all <- ggplot(dat, 
+       aes(nativeLength_mm, fill = gearType, position = "identity")) + 
+  geom_histogram(show.legend = FALSE) +
+  geom_vline(data = l.summ.nl.all, aes(xintercept =  l.lower, colour = gearType), linetype = "dashed", show.legend = FALSE) +
+  geom_vline(data = l.summ.nl.all, aes(xintercept =  l.upper, colour = gearType), linetype = "dashed", show.legend = FALSE) +
+  facet_grid(gearType ~ scientificName, scales = "free_x")
+
+ggsave(nl.plots.all,
+       filename = here("Figs/fig_nativeLengths_all_summary.png"),
+       height = 7, width = 15)
+
+l.summ.nl.all.sub <- dat %>%
+  filter(!is.na(nativeLength_mm)) %>% 
+  filter(year >= 2021) %>% 
+  group_by(gearType, scientificName) %>%
+  summarise(
+    l.lower = quantile(nativeLength_mm, probs = 0.05),
+    l.upper = quantile(nativeLength_mm, probs = 0.95))
+
+nl.plots.all.sub <- ggplot(filter(dat, year >= 2021), 
+       aes(nativeLength_mm, fill = gearType, position = "identity")) + 
+  geom_histogram(show.legend = FALSE) +
+  geom_vline(data = l.summ.nl.all.sub, aes(xintercept =  l.lower, colour = gearType), linetype = "dashed", show.legend = FALSE) +
+  geom_vline(data = l.summ.nl.all.sub, aes(xintercept =  l.upper, colour = gearType), linetype = "dashed", show.legend = FALSE) +
+  facet_grid(gearType ~ scientificName, scales = "free_x")
+
+ggsave(nl.plots.all.sub,
+       filename = here("Figs/fig_nativeLengths_all_summary_sub.png"),
+       height = 7, width = 15)
 ```
-
-
-
 
 ```{r debug-tdr-times,eval=FALSE}
 # Unused code
