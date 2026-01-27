@@ -924,7 +924,7 @@ l.summ.nl.all <- dat %>%
   group_by(gearType, scientificName) %>%
   summarise(
     l.lower = quantile(nativeLength_mm, probs = 0.05),
-    l.upper = quantile(natLength_mm, probs = 0.95))
+    l.upper = quantile(nativeLength_mm, probs = 0.95))
 
 sl.plots.all <- ggplot(filter(dat, scientificName %in% sl.spp), 
        aes(standardLength_mm, group = season, fill = gearType, position = "identity")) + 
